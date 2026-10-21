@@ -1,0 +1,6 @@
+{
+  "name": "Ação Solidária: Missão & Cooperação",
+  "description": "Campanha solidária para cobertura de custos do transporte missionário e conserto veicular. Participe, escolha suas cotas e concorra a um Relógio Especial.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

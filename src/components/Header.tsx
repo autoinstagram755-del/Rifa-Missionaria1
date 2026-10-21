@@ -1,0 +1,110 @@
+import React from 'react';
+import { HeartHandshake, ShieldCheck, Database, Search, LayoutDashboard } from 'lucide-react';
+import { isSupabaseConfigured } from '../lib/supabase.ts';
+
+interface HeaderProps {
+  onOpenAdmin: () => void;
+  onOpenCheckOrder: () => void;
+  onOpenStory: () => void;
+  onOpenCombos: () => void;
+  onOpenGrid: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({
+  onOpenAdmin,
+  onOpenCheckOrder,
+  onOpenStory,
+  onOpenCombos,
+  onOpenGrid,
+}) => {
+  return (
+    <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 text-white shadow-lg">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-18">
+          {/* Logo e Nome da Ação */}
+          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-amber-400 to-yellow-300 flex items-center justify-center shadow-md shadow-amber-500/20 text-slate-950">
+              <HeartHandshake className="w-6 h-6 stroke-[2.2]" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="font-extrabold text-lg sm:text-xl tracking-tight text-white">
+                  Ação <span className="text-amber-400">Solidária</span>
+                </span>
+                <span className="hidden sm:inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-900/80 text-blue-200 border border-blue-700/50">
+                  Missão &amp; Fé
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 hidden sm:block">
+                Águas Lindas de Goiás ➔ Bertioga (Vision Day)
+              </p>
+            </div>
+          </div>
+
+          {/* Links e Navegação Desktop */}
+          <nav className="hidden md:flex items-center space-x-6 text-sm font-medium text-slate-300">
+            <button
+              onClick={onOpenStory}
+              className="hover:text-amber-400 transition-colors cursor-pointer"
+            >
+              Testemunho &amp; Causa
+            </button>
+            <button
+              onClick={onOpenCombos}
+              className="hover:text-amber-400 transition-colors cursor-pointer"
+            >
+              Combos de Cotas
+            </button>
+            <button
+              onClick={onOpenGrid}
+              className="hover:text-amber-400 transition-colors cursor-pointer"
+            >
+              Escolher Números (001-500)
+            </button>
+          </nav>
+
+          {/* Ações Rápidas */}
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* Botão Consultar Meus Números */}
+            <button
+              onClick={onOpenCheckOrder}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition cursor-pointer"
+              title="Consultar cotas compradas pelo seu CPF"
+            >
+              <Search className="w-4 h-4 text-amber-400" />
+              <span className="hidden xs:inline">Consultar Cota</span>
+            </button>
+
+            {/* Painel Gestor / Admin */}
+            <button
+              onClick={onOpenAdmin}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-900 bg-amber-400 hover:bg-amber-300 rounded-lg shadow-sm transition cursor-pointer"
+              title="Painel de Controle e Gestão da Ação Solidária"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Painel</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Faixa sutil de status de conexão */}
+      <div className="bg-slate-950/80 border-t border-slate-800/60 px-4 py-1 text-[11px] text-slate-400 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>
+              {isSupabaseConfigured
+                ? 'Supabase Conectado (tnnrppcrcakipkmfedmm)'
+                : 'Modo Demonstração Ativo (Pronto para Uso & Testes)'}
+            </span>
+          </div>
+          <div className="flex items-center space-x-2 text-slate-400">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Pagamento Seguro via InfinitePay Pix</span>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+};
