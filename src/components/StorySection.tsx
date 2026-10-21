@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Award,
 } from 'lucide-react';
+import { JourneyGallery } from './JourneyGallery.tsx';
 
 interface StorySectionProps {
   onGoToCombos: () => void;
@@ -149,6 +150,9 @@ export const StorySection: React.FC<StorySectionProps> = ({ onGoToCombos }) => {
             );
           })}
         </div>
+
+        {/* Galeria Visual Completa: Diário Visual da Missão (22 fotos cronológicas) */}
+        <JourneyGallery />
 
         {/* Card de Compromisso de Honra com o Proprietário do Carro */}
         <div className="mt-12 rounded-3xl bg-gradient-to-br from-slate-800 via-slate-800 to-slate-900 border border-amber-500/30 p-6 sm:p-8 max-w-4xl mx-auto shadow-2xl space-y-6">
