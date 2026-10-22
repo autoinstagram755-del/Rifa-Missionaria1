@@ -266,17 +266,24 @@ export const JourneyGallery: React.FC = () => {
     setFotoAtivaIndex((prev) => (prev - 1 + FOTOS_JORNADA.length) % FOTOS_JORNADA.length);
   };
 
-  // Scroll automático do carrossel de miniaturas para manter a foto ativa visível
+  // Scroll horizontal seguro do carrossel de miniaturas (sem afetar o scroll da página)
+  const isFirstRender = useRef(true);
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     if (scrollThumbnailsRef.current) {
       const activeBtn = scrollThumbnailsRef.current.querySelector(
         `[data-thumb-index="${fotoAtivaIndex}"]`
       ) as HTMLElement;
       if (activeBtn) {
-        activeBtn.scrollIntoView({
+        const container = scrollThumbnailsRef.current;
+        const scrollTarget =
+          activeBtn.offsetLeft - container.clientWidth / 2 + activeBtn.clientWidth / 2;
+        container.scrollTo({
+          left: Math.max(0, scrollTarget),
           behavior: 'smooth',
-          block: 'nearest',
-          inline: 'center',
         });
       }
     }

@@ -53,6 +53,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Garante que o site sempre inicialize no topo (Hero/Cabeçalho)
+    if (typeof window !== 'undefined') {
+      if ('scrollRestoration' in window.history) {
+        window.history.scrollRestoration = 'manual';
+      }
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+
     carregarDados();
 
     // Detecção de retorno do Checkout Integrado da InfinitePay via redirect_url
