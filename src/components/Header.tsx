@@ -3,7 +3,7 @@ import { HeartHandshake, ShieldCheck, Database, Search, LayoutDashboard } from '
 import { isSupabaseConfigured } from '../lib/supabase.ts';
 
 interface HeaderProps {
-  onOpenAdmin: () => void;
+  onOpenAdmin?: () => void;
   onOpenCheckOrder: () => void;
   onOpenStory: () => void;
   onOpenCombos: () => void;
@@ -11,7 +11,6 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  onOpenAdmin,
   onOpenCheckOrder,
   onOpenStory,
   onOpenCombos,
@@ -63,7 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </nav>
 
-          {/* Ações Rápidas */}
+          {/* Ações Rápidas do Comprador */}
           <div className="flex items-center space-x-2 sm:space-x-3">
             {/* Botão Consultar Meus Números */}
             <button
@@ -72,17 +71,17 @@ export const Header: React.FC<HeaderProps> = ({
               title="Consultar cotas compradas pelo seu CPF"
             >
               <Search className="w-4 h-4 text-amber-400" />
-              <span className="hidden xs:inline">Consultar Cota</span>
+              <span>Consultar Cota</span>
             </button>
 
-            {/* Painel Gestor / Admin */}
+            {/* Botão Garantir Cotas */}
             <button
-              onClick={onOpenAdmin}
+              onClick={onOpenCombos}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-900 bg-amber-400 hover:bg-amber-300 rounded-lg shadow-sm transition cursor-pointer"
-              title="Painel de Controle e Gestão da Ação Solidária"
+              title="Ir para os Combos Promocionais de Cotas"
             >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Painel</span>
+              <HeartHandshake className="w-4 h-4" />
+              <span>Participar</span>
             </button>
           </div>
         </div>

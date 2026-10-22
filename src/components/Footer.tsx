@@ -4,13 +4,12 @@ import { HeartHandshake, ShieldCheck, Heart, MapPin, Phone, HelpCircle } from 'l
 interface FooterProps {
   onOpenStory: () => void;
   onOpenCombos: () => void;
-  onOpenAdmin: () => void;
+  onOpenAdmin?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
   onOpenStory,
   onOpenCombos,
-  onOpenAdmin,
 }) => {
   return (
     <footer className="bg-slate-950 text-slate-400 border-t border-slate-800 text-xs py-12">
@@ -61,12 +60,14 @@ export const Footer: React.FC<FooterProps> = ({
                 </button>
               </li>
               <li>
-                <button
-                  onClick={onOpenAdmin}
-                  className="hover:text-amber-400 transition cursor-pointer text-slate-500"
+                <a
+                  href="https://wa.me/5561991736136?text=Ol%C3%A1!%20Gostaria%20de%20tirar%20uma%20d%C3%BAvida%20sobre%20a%20A%C3%A7%C3%A3o%20Solid%C3%A1ria%20Mission%C3%A1ria."
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-amber-400 transition cursor-pointer text-slate-400"
                 >
-                  Painel Administrativo
-                </button>
+                  Dúvidas no WhatsApp
+                </a>
               </li>
             </ul>
           </div>

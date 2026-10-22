@@ -92,6 +92,12 @@ export default function App() {
         .catch((e) => console.warn('Erro ao carregar pedido do redirect:', e));
     }
 
+    // Acesso discreto de emergência para o gestor via parâmetro na URL (?admin=missao2026 ou ?admin=true)
+    const adminQuery = urlParams.get('admin');
+    if (adminQuery === 'missao2026' || adminQuery === 'true') {
+      setAdminModalOpen(true);
+    }
+
     // Intervalo de verificação periódica a cada 60s para liberar reservas com mais de 3h
     const intervalExpiracao = setInterval(async () => {
       const { pedidosCancelados, cotasLiberadas } = await verificarELiberarCotasExpiradas();
@@ -205,7 +211,6 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-amber-400 selection:text-slate-950">
       {/* Header com Navegação */}
       <Header
-        onOpenAdmin={() => setAdminModalOpen(true)}
         onOpenCheckOrder={() => setCheckOrderModalOpen(true)}
         onOpenStory={() => scrollTo('historia-missao')}
         onOpenCombos={() => scrollTo('combos-cotas')}
@@ -242,7 +247,6 @@ export default function App() {
       <Footer
         onOpenStory={() => scrollTo('historia-missao')}
         onOpenCombos={() => scrollTo('combos-cotas')}
-        onOpenAdmin={() => setAdminModalOpen(true)}
       />
 
       {/* Modal de Formulário de Checkout */}
