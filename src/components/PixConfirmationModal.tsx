@@ -54,7 +54,7 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
   onPagamentoConfirmado,
 }) => {
   const [copiadoPix, setCopiadoPix] = useState(false);
-  const [segundosRestantes, setSegundosRestantes] = useState(15 * 60);
+  const [segundosRestantes, setSegundosRestantes] = useState(3 * 60 * 60);
   const [statusPagamento, setStatusPagamento] = useState<'pendente' | 'pago'>('pendente');
   const [verificando, setVerificando] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -84,11 +84,17 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
     }
   }, [isOpen, dadosPedido?.pix_copia_cola]);
 
-  // Cronômetro regressivo de 15 minutos
+  // Cronômetro regressivo oficial de 3 horas (10.800 segundos)
   useEffect(() => {
     if (!isOpen || statusPagamento === 'pago') return;
 
-    setSegundosRestantes(15 * 60);
+    let segInicial = 3 * 60 * 60;
+    if (dadosPedido?.expires_at) {
+      const diffSeg = Math.floor((new Date(dadosPedido.expires_at).getTime() - Date.now()) / 1000);
+      segInicial = diffSeg > 0 ? diffSeg : 0;
+    }
+    setSegundosRestantes(segInicial);
+
     const interval = setInterval(() => {
       setSegundosRestantes((prev) => {
         if (prev <= 1) {
@@ -100,7 +106,7 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isOpen, statusPagamento]);
+  }, [isOpen, statusPagamento, dadosPedido?.expires_at]);
 
   // Polling automático sutil para verificar status no Supabase
   useEffect(() => {
@@ -126,9 +132,10 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
 
   if (!isOpen || !dadosPedido) return null;
 
-  const minutos = Math.floor(segundosRestantes / 60);
+  const horas = Math.floor(segundosRestantes / 3600);
+  const minutos = Math.floor((segundosRestantes % 3600) / 60);
   const segundos = segundosRestantes % 60;
-  const tempoFormatado = `${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
+  const tempoFormatado = `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
 
   const copiarPixCopiaECola = async () => {
     try {
@@ -249,13 +256,30 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
               </p>
             </div>
 
-            {/* Cronômetro */}
-            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 text-xs">
-              <div className="flex items-center space-x-2 text-slate-300">
-                <Clock className="w-4 h-4 text-amber-400" />
-                <span>Tempo restante para pagar:</span>
+            {/* Cronômetro de Reserva Oficial (3 Horas) */}
+            <div className={`p-3 rounded-2xl border text-xs space-y-1.5 transition ${
+              segundosRestantes === 0
+                ? 'bg-rose-950/60 border-rose-800/80 text-rose-200'
+                : 'bg-slate-950/80 border-slate-800 text-slate-300'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Clock className={`w-4 h-4 ${segundosRestantes === 0 ? 'text-rose-400' : 'text-amber-400 animate-pulse'}`} />
+                  <span className="font-semibold text-white">Reserva ativa por 3 horas:</span>
+                </div>
+                <span className={`font-mono font-black text-sm px-2 py-0.5 rounded-lg ${
+                  segundosRestantes === 0
+                    ? 'bg-rose-900/80 text-rose-200'
+                    : 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
+                }`}>
+                  {tempoFormatado}
+                </span>
               </div>
-              <span className="font-mono font-bold text-amber-400 text-sm">{tempoFormatado}</span>
+              <p className="text-[11px] text-slate-400 leading-tight">
+                {segundosRestantes === 0
+                  ? 'O prazo de 3 horas expirou. As cotas estão sendo liberadas automaticamente no sistema para outros participantes.'
+                  : 'Se o Pix não for concluído em até 3 horas, as cotas voltam automaticamente para a grade livre.'}
+              </p>
             </div>
 
             {/* Dados do Titular do Pix (Transparência Total) */}

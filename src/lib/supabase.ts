@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { TOTAL_COTAS, calcularValorTotal } from '../utils/rules.ts';
+import { TOTAL_COTAS, calcularValorTotal, TEMPO_EXPIRACAO_RESERVA_MS } from '../utils/rules.ts';
 
 export interface Cota {
   id: string;
@@ -79,8 +79,16 @@ function gerarCotasIniciais(): Cota[] {
 
 /**
  * Carrega a lista completa de cotas (1 a 500)
+ * Libera automaticamente cotas com reservas expiradas há mais de 3 horas
  */
 export async function obterCotas(): Promise<Cota[]> {
+  // Verifica e libera reservas com mais de 3 horas
+  try {
+    await verificarELiberarCotasExpiradas();
+  } catch (e) {
+    // Continua mesmo se der erro na verificação
+  }
+
   if (isSupabaseConfigured) {
     try {
       const { data, error } = await supabase
@@ -123,6 +131,10 @@ export function salvarCotasLocais(cotas: Cota[]): void {
  * Carrega pedidos
  */
 export async function obterPedidos(): Promise<Pedido[]> {
+  try {
+    await verificarELiberarCotasExpiradas();
+  } catch (e) {}
+
   if (isSupabaseConfigured) {
     try {
       const { data, error } = await supabase
@@ -238,6 +250,90 @@ export async function atualizarStatusPedido(
   }
 
   return true;
+}
+
+/**
+ * Verifica pedidos pendentes com mais de 3 horas e libera suas cotas automaticamente
+ */
+export async function verificarELiberarCotasExpiradas(): Promise<{ pedidosCancelados: number; cotasLiberadas: number }> {
+  const agora = Date.now();
+  let pedidosCancelados = 0;
+  let cotasLiberadas = 0;
+
+  if (isSupabaseConfigured) {
+    try {
+      const limiteExpiracaoIso = new Date(agora - TEMPO_EXPIRACAO_RESERVA_MS).toISOString();
+      const { data: expirados, error } = await supabase
+        .from('pedidos')
+        .select('id')
+        .eq('status_pagamento', 'pendente')
+        .lt('created_at', limiteExpiracaoIso);
+
+      if (!error && expirados && expirados.length > 0) {
+        const ids = expirados.map((p) => p.id);
+        pedidosCancelados += ids.length;
+
+        // Atualiza pedidos expirados para 'cancelado'
+        await supabase
+          .from('pedidos')
+          .update({ status_pagamento: 'cancelado', updated_at: new Date().toISOString() })
+          .in('id', ids);
+
+        // Libera as cotas correspondentes
+        const { data: cotasLiberadasDb } = await supabase
+          .from('cotas')
+          .update({ status: 'disponivel', pedido_id: null, updated_at: new Date().toISOString() })
+          .in('pedido_id', ids)
+          .select('numero');
+
+        if (cotasLiberadasDb) {
+          cotasLiberadas += cotasLiberadasDb.length;
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao expirar reservas no Supabase:', e);
+    }
+  }
+
+  // Fallback e sincronização LocalStorage
+  const localPedidos = localStorage.getItem(LOCAL_STORAGE_PEDIDOS_KEY);
+  const localCotas = localStorage.getItem(LOCAL_STORAGE_COTAS_KEY);
+
+  if (localPedidos && localCotas) {
+    try {
+      const listaPedidos: Pedido[] = JSON.parse(localPedidos);
+      const listaCotas: Cota[] = JSON.parse(localCotas);
+      const idsCancelados = new Set<string>();
+
+      for (const ped of listaPedidos) {
+        if (ped.status_pagamento === 'pendente') {
+          const tempoCriacao = new Date(ped.created_at).getTime();
+          if (agora - tempoCriacao >= TEMPO_EXPIRACAO_RESERVA_MS) {
+            ped.status_pagamento = 'cancelado';
+            idsCancelados.add(ped.id);
+            pedidosCancelados++;
+          }
+        }
+      }
+
+      if (idsCancelados.size > 0) {
+        for (const c of listaCotas) {
+          if (c.pedido_id && idsCancelados.has(c.pedido_id) && c.status === 'reservado') {
+            c.status = 'disponivel';
+            c.pedido_id = null;
+            c.updated_at = new Date().toISOString();
+            cotasLiberadas++;
+          }
+        }
+        localStorage.setItem(LOCAL_STORAGE_PEDIDOS_KEY, JSON.stringify(listaPedidos));
+        localStorage.setItem(LOCAL_STORAGE_COTAS_KEY, JSON.stringify(listaCotas));
+      }
+    } catch (e) {
+      console.warn('Erro ao expirar reservas locais:', e);
+    }
+  }
+
+  return { pedidosCancelados, cotasLiberadas };
 }
 
 /**

@@ -8,6 +8,7 @@ import { CheckoutModal } from './components/CheckoutModal.tsx';
 import { PixConfirmationModal } from './components/PixConfirmationModal.tsx';
 import { AdminPanelModal } from './components/AdminPanelModal.tsx';
 import { CheckOrderModal } from './components/CheckOrderModal.tsx';
+import { FloatingWhatsApp } from './components/FloatingWhatsApp.tsx';
 import { Footer } from './components/Footer.tsx';
 import {
   Cota,
@@ -16,6 +17,7 @@ import {
   obterPedidos,
   salvarCotasLocais,
   salvarPedidoLocal,
+  verificarELiberarCotasExpiradas,
 } from './lib/supabase.ts';
 import {
   calcularEstatisticas,
@@ -81,6 +83,16 @@ export default function App() {
         })
         .catch((e) => console.warn('Erro ao carregar pedido do redirect:', e));
     }
+
+    // Intervalo de verificação periódica a cada 60s para liberar reservas com mais de 3h
+    const intervalExpiracao = setInterval(async () => {
+      const { pedidosCancelados, cotasLiberadas } = await verificarELiberarCotasExpiradas();
+      if (pedidosCancelados > 0 || cotasLiberadas > 0) {
+        carregarDados();
+      }
+    }, 60000);
+
+    return () => clearInterval(intervalExpiracao);
   }, [carregarDados]);
 
   const stats = calcularEstatisticas(cotas);
@@ -258,6 +270,9 @@ export default function App() {
         pedidos={pedidos}
         cotas={cotas}
       />
+
+      {/* Botão Flutuante de WhatsApp para Dúvidas e Suporte (61 99173-6136) */}
+      <FloatingWhatsApp />
     </div>
   );
 }

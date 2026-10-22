@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Search, CheckCircle, Clock, ShieldCheck, AlertCircle } from 'lucide-react';
 import { Pedido, Cota } from '../lib/supabase.ts';
-import { formatarMoeda, formatarNumeroCota, mascararCPF, mascararWhatsApp } from '../utils/rules.ts';
+import { formatarMoeda, formatarNumeroCota, mascararCPF, mascararWhatsApp, TEMPO_EXPIRACAO_RESERVA_MS } from '../utils/rules.ts';
 
 interface CheckOrderModalProps {
   isOpen: boolean;
@@ -114,6 +114,35 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
                         {ped.status_pagamento}
                       </span>
                     </div>
+
+                    {!isPago && ped.status_pagamento === 'pendente' && (() => {
+                      const tempoDecorrido = Date.now() - new Date(ped.created_at).getTime();
+                      const restanteMs = Math.max(0, TEMPO_EXPIRACAO_RESERVA_MS - tempoDecorrido);
+                      const restMinutos = Math.floor(restanteMs / 60000);
+                      const restHoras = Math.floor(restMinutos / 60);
+                      const minFinais = restMinutos % 60;
+
+                      if (restanteMs <= 0) {
+                        return (
+                          <div className="p-2 rounded-xl bg-rose-950/50 border border-rose-800/60 text-rose-300 text-xs flex items-center space-x-2">
+                            <Clock className="w-3.5 h-3.5 shrink-0" />
+                            <span>Prazo de 3h expirado. Cotas liberadas na grade.</span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="p-2 rounded-xl bg-amber-950/40 border border-amber-600/30 text-amber-300 text-xs flex items-center justify-between">
+                          <span className="flex items-center space-x-1.5">
+                            <Clock className="w-3.5 h-3.5 shrink-0 animate-pulse" />
+                            <span>Tempo de reserva (3h):</span>
+                          </span>
+                          <span className="font-bold font-mono">
+                            {restHoras > 0 ? `${restHoras}h ${minFinais}m restantes` : `${minFinais}m restantes`}
+                          </span>
+                        </div>
+                      );
+                    })()}
 
                     <div className="text-xs text-slate-400 flex justify-between">
                       <span>Valor: {formatarMoeda(ped.valor_total)}</span>

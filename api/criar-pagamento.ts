@@ -230,8 +230,8 @@ export default async function handler(req: Request, res: Response) {
       txid
     );
 
-    const expiracaoEmMinutos = 15;
-    const expiresAt = new Date(Date.now() + expiracaoEmMinutos * 60 * 1000).toISOString();
+    const expiracaoEmHoras = 3;
+    const expiresAt = new Date(Date.now() + expiracaoEmHoras * 60 * 60 * 1000).toISOString();
 
     return res.status(200).json({
       success: true,

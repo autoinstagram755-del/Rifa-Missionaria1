@@ -22,6 +22,9 @@ import {
   Send,
   AlertCircle,
   CheckCheck,
+  MessageSquare,
+  Bell,
+  Clock3,
 } from 'lucide-react';
 import {
   Pedido,
@@ -29,6 +32,7 @@ import {
   atualizarStatusPedido,
   restaurarDemonstracao,
   criarPedidoManualAdmin,
+  verificarELiberarCotasExpiradas,
 } from '../lib/supabase.ts';
 import {
   formatarMoeda,
@@ -37,6 +41,8 @@ import {
   mascararWhatsApp,
   calcularValorTotal,
   COMBOS_DISPONIVEIS,
+  gerarMensagemLembreteWhatsapp,
+  TEMPO_EXPIRACAO_RESERVA_MS,
 } from '../utils/rules.ts';
 
 interface AdminPanelModalProps {
@@ -54,7 +60,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   cotas,
   onRecarregarDados,
 }) => {
-  const [abaAtiva, setAbaAtiva] = useState<'pedidos' | 'venda_manual' | 'cotas' | 'infinitepay' | 'sql'>('pedidos');
+  const [abaAtiva, setAbaAtiva] = useState<'pedidos' | 'venda_manual' | 'lembretes_whatsapp' | 'infinitepay' | 'sql'>('pedidos');
   const [busca, setBusca] = useState('');
   const [copiouSql, setCopiouSql] = useState(false);
   const [testandoWebhook, setTestandoWebhook] = useState(false);
@@ -78,12 +84,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     cotas: number[];
   } | null>(null);
   const [copiouRecibo, setCopiouRecibo] = useState(false);
+  const [copiouMsgId, setCopiouMsgId] = useState<string | null>(null);
+  const [executandoLimpeza, setExecutandoLimpeza] = useState(false);
 
   if (!isOpen) return null;
 
   const cotasPagas = cotas.filter((c) => c.status === 'pago');
   const cotasReservadas = cotas.filter((c) => c.status === 'reservado');
   const cotasDisponiveis = cotas.filter((c) => c.status === 'disponivel');
+  const pedidosPendentes = pedidos.filter((p) => p.status_pagamento === 'pendente');
 
   const totalArrecadado = pedidos
     .filter((p) => p.status_pagamento === 'pago')
@@ -342,6 +351,22 @@ ON CONFLICT (numero) DO NOTHING;`;
           >
             <Banknote className="w-3.5 h-3.5" />
             <span>Lançar Venda (Dinheiro / Balcão)</span>
+          </button>
+          <button
+            onClick={() => setAbaAtiva('lembretes_whatsapp')}
+            className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+              abaAtiva === 'lembretes_whatsapp'
+                ? 'bg-amber-400 text-slate-950 font-black shadow-md'
+                : 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30'
+            }`}
+          >
+            <Bell className="w-3.5 h-3.5" />
+            <span>Lembretes WhatsApp (1h &amp; 15m)</span>
+            {pedidosPendentes.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-black">
+                {pedidosPendentes.length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setAbaAtiva('infinitepay')}
@@ -875,6 +900,243 @@ ON CONFLICT (numero) DO NOTHING;`;
 }`}
                 </pre>
               </div>
+            </div>
+          )}
+
+          {abaAtiva === 'lembretes_whatsapp' && (
+            <div className="space-y-4">
+              {/* Card Educativo sobre Prevenção de Banimento e Regra de 3 Horas */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/60 via-slate-900 to-slate-900 border border-emerald-600/40 text-xs space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2">
+                    <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      <Bell className="w-4 h-4" />
+                    </span>
+                    <h4 className="font-bold text-sm text-white">
+                      Lembretes Inteligentes de Reservas (1h e 15 minutos)
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setExecutandoLimpeza(true);
+                      const res = await verificarELiberarCotasExpiradas();
+                      await onRecarregarDados();
+                      setExecutandoLimpeza(false);
+                      alert(
+                        `Verificação concluída:\n• ${res.pedidosCancelados} reservas expiradas canceladas\n• ${res.cotasLiberadas} cotas liberadas para a grade.`
+                      );
+                    }}
+                    disabled={executandoLimpeza}
+                    className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs flex items-center space-x-1.5 transition cursor-pointer self-start sm:self-auto"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${executandoLimpeza ? 'animate-spin' : ''}`} />
+                    <span>Liberar Reservas &gt; 3h Agora</span>
+                  </button>
+                </div>
+
+                <p className="text-slate-300 leading-relaxed">
+                  <strong className="text-emerald-300">🛡️ Proteção Anti-Banimento:</strong> A Meta (WhatsApp) bane chips comuns se usar robôs ou disparadores automáticos não oficiais de QR Code. Por isso, este painel calcula exatamente o momento de cada comprador e gera mensagens personalizadas com o nome da pessoa e o propósito missionário, permitindo que você envie com{' '}
+                  <strong className="text-white">1 clique seguro</strong> pelo seu WhatsApp sem qualquer risco de bloqueio.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px] text-slate-400">
+                  <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+                    <strong className="text-amber-400 block mb-0.5">⏰ Lembrete de 1 Hora:</strong>
+                    Agradece a intenção, reforça a causa do Pr. Jocimar e envia o Pix Copia e Cola para pagamento fácil.
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+                    <strong className="text-rose-400 block mb-0.5">⚠️ Alerta dos 15 Minutos Finais:</strong>
+                    Avisa com amor cristão que faltam 15 minutos para as 3 horas se completarem e as cotas voltarem à grade.
+                  </div>
+                </div>
+              </div>
+
+              {/* Lista de Pedidos Pendentes e Status dos Lembretes */}
+              {pedidosPendentes.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl bg-slate-950/70 border border-slate-800 text-slate-400 space-y-2">
+                  <CheckCheck className="w-10 h-10 text-emerald-400 mx-auto" />
+                  <p className="font-bold text-white text-sm">Nenhuma reserva pendente no momento!</p>
+                  <p className="text-xs">
+                    Todas as cotas escolhidas já foram pagas ou estão liberadas na grade.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-400 font-semibold">
+                    {pedidosPendentes.length}{' '}
+                    {pedidosPendentes.length === 1 ? 'reserva aguardando pagamento' : 'reservas aguardando pagamento'}:
+                  </p>
+
+                  {pedidosPendentes.map((ped) => {
+                    const agora = Date.now();
+                    const criadoEm = new Date(ped.created_at).getTime();
+                    const tempoDecorridoMs = agora - criadoEm;
+                    const decorridoMinutos = Math.floor(tempoDecorridoMs / 60000);
+                    const restanteMinutos = Math.max(0, 180 - decorridoMinutos); // 3h = 180 min
+
+                    const cotasAssociadas = cotas
+                      .filter((c) => c.pedido_id === ped.id)
+                      .map((c) => c.numero);
+                    const cotasFinais = cotasAssociadas.length > 0 ? cotasAssociadas : ped.cotas_numeros || [];
+
+                    const whatsLimpo = ped.whatsapp.replace(/\D/g, '');
+                    const whatsDestino = whatsLimpo.length >= 10 ? `55${whatsLimpo}` : '';
+
+                    // Mensagens geradas pelas regras oficiais
+                    const msg1h = gerarMensagemLembreteWhatsapp({
+                      nome: ped.nome_comprador,
+                      cotas: cotasFinais,
+                      valor: ped.valor_total,
+                      tipo: '1_hora',
+                      pixCopiaECola: ped.pix_copia_cola || undefined,
+                    });
+
+                    const msg15m = gerarMensagemLembreteWhatsapp({
+                      nome: ped.nome_comprador,
+                      cotas: cotasFinais,
+                      valor: ped.valor_total,
+                      tipo: '15_minutos',
+                      pixCopiaECola: ped.pix_copia_cola || undefined,
+                    });
+
+                    // Classificação do momento
+                    const isExpirado = restanteMinutos <= 0;
+                    const isFaltando15 = !isExpirado && restanteMinutos <= 15;
+                    const isMaisDe1Hora = !isExpirado && decorridoMinutos >= 60;
+
+                    return (
+                      <div
+                        key={ped.id}
+                        className={`p-4 rounded-2xl border transition space-y-3 ${
+                          isExpirado
+                            ? 'bg-rose-950/30 border-rose-800/50'
+                            : isFaltando15
+                            ? 'bg-amber-950/40 border-amber-500/50 ring-1 ring-amber-500/30'
+                            : isMaisDe1Hora
+                            ? 'bg-slate-950/90 border-blue-500/40'
+                            : 'bg-slate-950/80 border-slate-800'
+                        }`}
+                      >
+                        {/* Linha de Identificação & Status */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-extrabold text-white text-sm">
+                                {ped.nome_comprador}
+                              </span>
+                              <span className="text-xs text-slate-400 font-mono">
+                                ({mascararWhatsApp(ped.whatsapp)})
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              {ped.quantidade_cotas} cotas: {cotasFinais.map((n) => formatarNumeroCota(n)).join(', ')} •{' '}
+                              <strong className="text-emerald-400">{formatarMoeda(ped.valor_total)}</strong>
+                            </p>
+                          </div>
+
+                          {/* Tag de Tempo e Momento */}
+                          <div className="flex items-center space-x-1.5 self-start sm:self-auto">
+                            {isExpirado ? (
+                              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-900/80 text-rose-200 border border-rose-700">
+                                ❌ Expirado (&gt; 3h)
+                              </span>
+                            ) : isFaltando15 ? (
+                              <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-rose-500 text-white animate-pulse">
+                                🚨 Faltam {restanteMinutos} min para liberar!
+                              </span>
+                            ) : isMaisDe1Hora ? (
+                              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-900/80 text-blue-200 border border-blue-700">
+                                ⏳ {decorridoMinutos} min decorridos (Lembrete Ideal)
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-800 text-slate-300">
+                                🌱 Reserva Recente ({decorridoMinutos} min)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Botões de Ação Direta no WhatsApp (1-Clique Seguro) */}
+                        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/80">
+                          {whatsDestino && (
+                            <>
+                              <a
+                                href={`https://wa.me/${whatsDestino}?text=${encodeURIComponent(msg1h)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center space-x-1.5 transition cursor-pointer shadow-sm"
+                                title="Enviar mensagem fraterna de lembrete de 1 hora"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                                <span>Lembrete 1h (WhatsApp)</span>
+                              </a>
+
+                              <a
+                                href={`https://wa.me/${whatsDestino}?text=${encodeURIComponent(msg15m)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-white font-bold text-xs flex items-center space-x-1.5 transition cursor-pointer shadow-sm"
+                                title="Enviar aviso urgente de que faltam 15 minutos para liberação das cotas"
+                              >
+                                <Clock3 className="w-3.5 h-3.5" />
+                                <span>Alerta Urgente 15min (WhatsApp)</span>
+                              </a>
+                            </>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(msg1h);
+                              setCopiouMsgId(ped.id);
+                              setTimeout(() => setCopiouMsgId(null), 3000);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs flex items-center space-x-1 transition cursor-pointer"
+                          >
+                            {copiouMsgId === ped.id ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                <span>Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5" />
+                                <span>Copiar Texto</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await handleMarcarComoPago(ped.id);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-emerald-700/80 hover:bg-emerald-600 text-emerald-100 font-bold text-xs flex items-center space-x-1 transition cursor-pointer ml-auto"
+                            title="Confirmar pagamento deste pedido"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Confirmar Pago</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (confirm(`Deseja realmente cancelar a reserva e liberar as cotas de ${ped.nome_comprador}?`)) {
+                                await handleCancelarPedido(ped.id);
+                              }
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl text-rose-400 hover:bg-rose-950/60 font-semibold text-xs transition cursor-pointer"
+                            title="Cancelar reserva imediatamente"
+                          >
+                            Liberar Cotas
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

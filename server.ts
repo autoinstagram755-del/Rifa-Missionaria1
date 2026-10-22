@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import criarPagamentoHandler from './api/criar-pagamento.ts';
 import webhookInfinitePayHandler from './api/webhook-infinitepay.ts';
 import consultarPedidoHandler from './api/consultar-pedido.ts';
+import expirarReservasHandler from './api/expirar-reservas.ts';
 
 dotenv.config();
 
@@ -32,10 +33,31 @@ async function startServer() {
     consultarPedidoHandler(req, res);
   });
 
+  app.all('/api/expirar-reservas', (req, res) => {
+    expirarReservasHandler(req, res);
+  });
+
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
+
+  // Rotina em segundo plano no servidor para expirar reservas com mais de 3 horas
+  setInterval(() => {
+    // Chamada interna simulada
+    const fakeReq: any = { method: 'GET', headers: {} };
+    const fakeRes: any = {
+      setHeader: () => {},
+      status: () => ({
+        json: (dados: any) => {
+          if (dados && dados.pedidos_cancelados > 0) {
+            console.log(`[Auto-Expirar 3h] ${dados.pedidos_cancelados} pedidos cancelados e ${dados.cotas_liberadas} cotas liberadas.`);
+          }
+        },
+      }),
+    };
+    expirarReservasHandler(fakeReq, fakeRes).catch(() => {});
+  }, 60000);
 
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');

@@ -295,3 +295,60 @@ export function gerarPixBacen(
   return payload + crc;
 }
 
+// WhatsApp oficial para suporte e dúvidas
+export const WHATSAPP_DUVIDAS = '5561991736136';
+export const WHATSAPP_DUVIDAS_FORMATADO = '(61) 99173-6136';
+
+// Tempo máximo de reserva antes da liberação automática: 3 horas
+export const TEMPO_EXPIRACAO_RESERVA_HORAS = 3;
+export const TEMPO_EXPIRACAO_RESERVA_MS = 3 * 60 * 60 * 1000; // 10.800.000 ms
+
+export interface DadosLembreteWhatsapp {
+  nome: string;
+  cotas: number[];
+  valor: number;
+  tipo: '1_hora' | '15_minutos' | 'expirado';
+  pixCopiaECola?: string;
+}
+
+/**
+ * Gera mensagem fraterna para WhatsApp reforçando a ação solidária missionária
+ * Usada nos lembretes de 1 hora e de 15 minutos restantes
+ */
+export function gerarMensagemLembreteWhatsapp(dados: DadosLembreteWhatsapp): string {
+  const primeiroNome = dados.nome.trim().split(' ')[0] || dados.nome.trim();
+  const cotasTexto = dados.cotas.map((n) => formatarNumeroCota(n)).join(', ');
+  const valorTexto = formatarMoeda(dados.valor);
+
+  if (dados.tipo === '1_hora') {
+    return (
+      `Olá, ${primeiroNome}! A paz do Senhor! 🙏✨\n\n` +
+      `Passando com muito carinho para agradecer pelo seu apoio à *Ação Solidária: Missão & Cooperação* em prol do Pr. Jocimar Araújo e Pra. Ana Cristina.\n\n` +
+      `📌 *Seus Números Reservados:* ${cotasTexto}\n` +
+      `💰 *Valor Total:* ${valorTexto}\n\n` +
+      `Esta ação é fundamental para quitarmos as despesas urgentes de transporte missionário e mantermos a obra avançando.\n\n` +
+      `Notamos que o pagamento Pix ainda está pendente. Lembrando que o sistema mantém as cotas reservadas por *3 horas*. Você ainda tem tempo para garantir sua participação!\n\n` +
+      (dados.pixCopiaECola ? `🔑 *Pix Copia e Cola:*\n\`${dados.pixCopiaECola}\`\n\n` : '') +
+      `Qualquer dúvida, estamos à inteira disposição no WhatsApp (61) 99173-6136. Deus abençoe abundantemente!`
+    );
+  }
+
+  if (dados.tipo === '15_minutos') {
+    return (
+      `Olá, ${primeiroNome}! A paz do Senhor! ⏳⚠️\n\n` +
+      `Passando para avisar que faltam apenas *15 minutos* para completar o prazo de 3 horas da sua reserva na *Ação Solidária: Missão & Cooperação*.\n\n` +
+      `📌 *Cotas Reservadas:* ${cotasTexto} (${valorTexto})\n\n` +
+      `Como o sistema é automático, se o Pix não for concluído nesses próximos 15 minutos, esses números voltarão a ficar disponíveis na grade para outros irmãos cooperadores.\n\n` +
+      `Seu apoio é uma grande bênção para a quitação do veículo missionário do Pr. Jocimar!\n\n` +
+      (dados.pixCopiaECola ? `🔑 *Pix Copia e Cola para pagamento rápido:*\n\`${dados.pixCopiaECola}\`\n\n` : '') +
+      `Caso já tenha feito, por favor desconsidere este aviso. Um abraço fraterno!`
+    );
+  }
+
+  return (
+    `Olá, ${primeiroNome}! A paz do Senhor!\n\n` +
+    `Informamos que o prazo de 3 horas para as cotas (${cotasTexto}) da Ação Solidária expirou e os números foram liberados no sistema. Caso ainda queira participar, você pode acessar novamente e escolher novas cotas!\n\n` +
+    `Deus te abençoe!`
+  );
+}
+

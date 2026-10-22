@@ -89,3 +89,46 @@ test('geração de Pix padrão Banco Central (BR Code / EMV) com CRC16 válido',
   assert.equal(pix.endsWith(crcCalculado), true);
 });
 
+test('mensagens de lembrete WhatsApp contêm nome, números e causa missionária', async () => {
+  const {
+    gerarMensagemLembreteWhatsapp,
+    TEMPO_EXPIRACAO_RESERVA_HORAS,
+    TEMPO_EXPIRACAO_RESERVA_MS,
+    WHATSAPP_DUVIDAS,
+  } = await import('./rules.ts');
+
+  assert.equal(TEMPO_EXPIRACAO_RESERVA_HORAS, 3);
+  assert.equal(TEMPO_EXPIRACAO_RESERVA_MS, 3 * 3600 * 1000);
+  assert.equal(WHATSAPP_DUVIDAS, '5561991736136');
+
+  // Teste Mensagem 1 Hora
+  const msg1h = gerarMensagemLembreteWhatsapp({
+    nome: 'Carlos Eduardo',
+    cotas: [7, 14, 21],
+    valor: 50.0,
+    tipo: '1_hora',
+    pixCopiaECola: '00020126...TESTE',
+  });
+
+  assert.equal(msg1h.includes('Carlos'), true);
+  assert.equal(msg1h.includes('007, 014, 021'), true);
+  assert.equal(msg1h.includes('Pr. Jocimar'), true);
+  assert.equal(msg1h.includes('transporte missionário'), true);
+  assert.equal(msg1h.includes('3 horas'), true);
+  assert.equal(msg1h.includes('00020126...TESTE'), true);
+
+  // Teste Mensagem 15 Minutos
+  const msg15m = gerarMensagemLembreteWhatsapp({
+    nome: 'Ana Paula',
+    cotas: [100],
+    valor: 20.0,
+    tipo: '15_minutos',
+    pixCopiaECola: 'PIX15M',
+  });
+
+  assert.equal(msg15m.includes('Ana'), true);
+  assert.equal(msg15m.includes('15 minutos'), true);
+  assert.equal(msg15m.includes('100'), true);
+  assert.equal(msg15m.includes('Pr. Jocimar'), true);
+});
+

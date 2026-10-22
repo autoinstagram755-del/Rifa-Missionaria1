@@ -133,7 +133,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         chave_pix_formatada: CHAVE_PIX_FORMATADA,
         titular_pix: NOME_TITULAR_PIX,
         checkout_url: `https://checkout.infinitepay.io/jocimar-silva-128?amount=${Math.round(valorTotal * 100)}&order_nsu=${pedidoMockId}`,
-        expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        expires_at: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
       });
     } finally {
       setCarregando(false);
