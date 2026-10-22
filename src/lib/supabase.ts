@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { TOTAL_COTAS } from '../utils/rules.ts';
+import { TOTAL_COTAS, calcularValorTotal } from '../utils/rules.ts';
 
 export interface Cota {
   id: string;
@@ -247,3 +247,87 @@ export function restaurarDemonstracao(): void {
   localStorage.removeItem(LOCAL_STORAGE_COTAS_KEY);
   localStorage.removeItem(LOCAL_STORAGE_PEDIDOS_KEY);
 }
+
+/**
+ * Cria um pedido manual direto pelo Painel Administrativo
+ * Usado quando a pessoa paga em dinheiro vivo em mãos, Pix avulso direto no banco, etc.
+ */
+export async function criarPedidoManualAdmin(params: {
+  nome: string;
+  whatsapp: string;
+  cpf?: string;
+  cotasNumeros: number[];
+  formaPagamento: 'dinheiro' | 'pix_direto' | 'maquininha';
+}): Promise<{ success: boolean; pedidoId: string; error?: string }> {
+  const pedidoId = `adm-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const qtd = params.cotasNumeros.length;
+  const valorTotal = calcularValorTotal(qtd);
+  const now = new Date().toISOString();
+
+  const novoPedido: Pedido = {
+    id: pedidoId,
+    nome_comprador: params.nome.trim(),
+    whatsapp: params.whatsapp.trim(),
+    cpf: params.cpf ? params.cpf.replace(/\D/g, '') : 'SEM_CPF_MANUAL',
+    valor_total: valorTotal,
+    quantidade_cotas: qtd,
+    status_pagamento: 'pago',
+    transaction_id_infinitepay: `MANUAL_${params.formaPagamento.toUpperCase()}`,
+    cotas_numeros: params.cotasNumeros,
+    created_at: now,
+    updated_at: now,
+  };
+
+  if (isSupabaseConfigured) {
+    try {
+      const { error: errPed } = await supabase.from('pedidos').insert({
+        id: pedidoId,
+        nome_comprador: novoPedido.nome_comprador,
+        whatsapp: novoPedido.whatsapp,
+        cpf: novoPedido.cpf,
+        valor_total: valorTotal,
+        quantidade_cotas: qtd,
+        status_pagamento: 'pago',
+        transaction_id_infinitepay: novoPedido.transaction_id_infinitepay,
+        created_at: now,
+        updated_at: now,
+      });
+
+      if (!errPed) {
+        await supabase
+          .from('cotas')
+          .update({
+            status: 'pago',
+            pedido_id: pedidoId,
+            updated_at: now,
+          })
+          .in('numero', params.cotasNumeros);
+      }
+    } catch (e) {
+      console.warn('Erro ao salvar no Supabase:', e);
+    }
+  }
+
+  // Atualiza localmente também
+  salvarPedidoLocal(novoPedido);
+
+  // Atualiza cotas locais
+  const localCotas = localStorage.getItem(LOCAL_STORAGE_COTAS_KEY);
+  if (localCotas) {
+    try {
+      const cotas: Cota[] = JSON.parse(localCotas);
+      const setNumeros = new Set(params.cotasNumeros);
+      for (const c of cotas) {
+        if (setNumeros.has(c.numero)) {
+          c.status = 'pago';
+          c.pedido_id = pedidoId;
+          c.updated_at = now;
+        }
+      }
+      localStorage.setItem(LOCAL_STORAGE_COTAS_KEY, JSON.stringify(cotas));
+    } catch (e) {}
+  }
+
+  return { success: true, pedidoId };
+}
+

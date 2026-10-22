@@ -15,9 +15,29 @@ import {
   Download,
   ShieldAlert,
   ExternalLink,
+  Banknote,
+  PlusCircle,
+  Receipt,
+  UserPlus,
+  Send,
+  AlertCircle,
+  CheckCheck,
 } from 'lucide-react';
-import { Pedido, Cota, atualizarStatusPedido, restaurarDemonstracao } from '../lib/supabase.ts';
-import { formatarMoeda, formatarNumeroCota, mascararCPF, mascararWhatsApp } from '../utils/rules.ts';
+import {
+  Pedido,
+  Cota,
+  atualizarStatusPedido,
+  restaurarDemonstracao,
+  criarPedidoManualAdmin,
+} from '../lib/supabase.ts';
+import {
+  formatarMoeda,
+  formatarNumeroCota,
+  mascararCPF,
+  mascararWhatsApp,
+  calcularValorTotal,
+  COMBOS_DISPONIVEIS,
+} from '../utils/rules.ts';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -34,11 +54,30 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   cotas,
   onRecarregarDados,
 }) => {
-  const [abaAtiva, setAbaAtiva] = useState<'pedidos' | 'cotas' | 'sql' | 'infinitepay'>('pedidos');
+  const [abaAtiva, setAbaAtiva] = useState<'pedidos' | 'venda_manual' | 'cotas' | 'infinitepay' | 'sql'>('pedidos');
   const [busca, setBusca] = useState('');
   const [copiouSql, setCopiouSql] = useState(false);
   const [testandoWebhook, setTestandoWebhook] = useState(false);
   const [resultadoWebhook, setResultadoWebhook] = useState<string | null>(null);
+
+  // Estados para Venda Manual / Balcão
+  const [manualNome, setManualNome] = useState('');
+  const [manualWhatsapp, setManualWhatsapp] = useState('');
+  const [manualCpf, setManualCpf] = useState('');
+  const [manualFormaPagamento, setManualFormaPagamento] = useState<'dinheiro' | 'pix_direto' | 'maquininha'>('dinheiro');
+  const [manualQtd, setManualQtd] = useState(1);
+  const [manualModoEscolha, setManualModoEscolha] = useState<'combo' | 'especifico'>('combo');
+  const [manualNumerosTexto, setManualNumerosTexto] = useState('');
+  const [manualSalvando, setManualSalvando] = useState(false);
+  const [manualErro, setManualErro] = useState<string | null>(null);
+  const [manualSucesso, setManualSucesso] = useState<{
+    pedidoId: string;
+    nome: string;
+    whatsapp: string;
+    valor: number;
+    cotas: number[];
+  } | null>(null);
+  const [copiouRecibo, setCopiouRecibo] = useState(false);
 
   if (!isOpen) return null;
 
@@ -71,6 +110,96 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       await atualizarStatusPedido(pedidoId, 'cancelado');
       onRecarregarDados();
     }
+  };
+
+  const handleLancarVendaManual = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setManualErro(null);
+
+    if (!manualNome.trim() || manualNome.trim().length < 3) {
+      setManualErro('Por favor, informe o nome completo do comprador.');
+      return;
+    }
+
+    const whatsDigits = manualWhatsapp.replace(/\D/g, '');
+    if (!manualWhatsapp.trim() || whatsDigits.length < 10) {
+      setManualErro('Por favor, informe um WhatsApp/telefone válido com DDD (mínimo 10 dígitos).');
+      return;
+    }
+
+    let cotasSelecionadas: number[] = [];
+
+    if (manualModoEscolha === 'combo') {
+      const disponiveis = cotas.filter((c) => c.status === 'disponivel').map((c) => c.numero);
+      if (disponiveis.length < manualQtd) {
+        setManualErro(`Não há ${manualQtd} cotas disponíveis no momento. Restam apenas ${disponiveis.length}.`);
+        return;
+      }
+      cotasSelecionadas = disponiveis.slice(0, manualQtd);
+    } else {
+      // Modo números específicos
+      const partes = manualNumerosTexto
+        .split(/[,;\s]+/)
+        .map((p) => parseInt(p.trim(), 10))
+        .filter((n) => !isNaN(n) && n >= 1 && n <= 500);
+
+      const unicos = Array.from(new Set(partes));
+
+      if (unicos.length === 0) {
+        setManualErro('Informe pelo menos um número de cota válido (entre 001 e 500).');
+        return;
+      }
+
+      // Verifica se algum já está ocupado
+      const ocupados = cotas.filter((c) => unicos.includes(c.numero) && c.status !== 'disponivel');
+      if (ocupados.length > 0) {
+        const strOcupados = ocupados.map((c) => formatarNumeroCota(c.numero)).join(', ');
+        setManualErro(`As seguintes cotas já estão ocupadas/reservadas: ${strOcupados}. Escolha outros números.`);
+        return;
+      }
+
+      cotasSelecionadas = unicos;
+    }
+
+    setManualSalvando(true);
+    try {
+      const valorTotal = calcularValorTotal(cotasSelecionadas.length);
+      const res = await criarPedidoManualAdmin({
+        nome: manualNome.trim(),
+        whatsapp: manualWhatsapp.trim(),
+        cpf: manualCpf.trim() ? manualCpf.replace(/\D/g, '') : undefined,
+        cotasNumeros: cotasSelecionadas,
+        formaPagamento: manualFormaPagamento,
+      });
+
+      if (res.success) {
+        setManualSucesso({
+          pedidoId: res.pedidoId,
+          nome: manualNome.trim(),
+          whatsapp: manualWhatsapp.trim(),
+          valor: valorTotal,
+          cotas: cotasSelecionadas,
+        });
+        setManualNome('');
+        setManualWhatsapp('');
+        setManualCpf('');
+        setManualNumerosTexto('');
+        onRecarregarDados();
+      } else {
+        setManualErro(res.error || 'Erro ao lançar cotas.');
+      }
+    } catch (err: any) {
+      setManualErro(err.message || 'Erro inesperado ao salvar.');
+    } finally {
+      setManualSalvando(false);
+    }
+  };
+
+  const copiarReciboWhatsapp = async (recibo: { nome: string; valor: number; cotas: number[] }) => {
+    const texto = `Paz do Senhor, ${recibo.nome}!\n\nConfirmamos a sua participação na Ação Solidária: Missão & Cooperação.\n\n🎟️ Seus números da sorte no sorteio do Relógio Especial:\n${recibo.cotas.map((n) => formatarNumeroCota(n)).join(', ')} (${recibo.cotas.length} ${recibo.cotas.length === 1 ? 'cota' : 'cotas'})\n\n💰 Valor recebido: ${formatarMoeda(recibo.valor)}\n\nMuito obrigado pelo seu apoio e cooperação missionária! Deus abençoe abundantemente.`;
+    await navigator.clipboard.writeText(texto);
+    setCopiouRecibo(true);
+    setTimeout(() => setCopiouRecibo(false), 3000);
   };
 
   const handleRestaurarBanco = () => {
@@ -200,6 +329,21 @@ ON CONFLICT (numero) DO NOTHING;`;
             Pedidos Recebidos ({pedidos.length})
           </button>
           <button
+            onClick={() => {
+              setAbaAtiva('venda_manual');
+              setManualSucesso(null);
+              setManualErro(null);
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+              abaAtiva === 'venda_manual'
+                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
+                : 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30'
+            }`}
+          >
+            <Banknote className="w-3.5 h-3.5" />
+            <span>Lançar Venda (Dinheiro / Balcão)</span>
+          </button>
+          <button
             onClick={() => setAbaAtiva('infinitepay')}
             className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer flex items-center space-x-1.5 ${
               abaAtiva === 'infinitepay'
@@ -315,6 +459,284 @@ ON CONFLICT (numero) DO NOTHING;`;
                     );
                   })}
                 </div>
+              )}
+            </div>
+          )}
+
+          {abaAtiva === 'venda_manual' && (
+            <div className="space-y-6">
+              {/* Header da Aba */}
+              <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/60 text-xs text-emerald-200 space-y-1">
+                <div className="flex items-center space-x-2 text-white font-bold text-sm">
+                  <Banknote className="w-4 h-4 text-emerald-400" />
+                  <span>Lançamento Manual de Cotas (Balcão / Dinheiro / Pix Direto)</span>
+                </div>
+                <p className="text-slate-300">
+                  Cadastre compradores que pagaram em <strong>dinheiro em mãos</strong> no culto, na igreja, ou que enviaram Pix avulso diretamente para o Pastor. As cotas ficam marcadas como <strong>PAGAS</strong> na hora e computadas no total da ação!
+                </p>
+              </div>
+
+              {manualSucesso ? (
+                /* Card de Sucesso / Recibo Gerado */
+                <div className="p-6 rounded-3xl bg-slate-950 border border-emerald-500/40 text-center space-y-4 animate-in zoom-in-95 duration-200">
+                  <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20">
+                    <CheckCheck className="w-8 h-8" />
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block">
+                      Cotas Lançadas com Sucesso!
+                    </span>
+                    <h4 className="text-2xl font-black text-white">Venda Confirmada &amp; Paga</h4>
+                    <p className="text-xs text-slate-400">
+                      Comprador: <strong className="text-white">{manualSucesso.nome}</strong> • {manualSucesso.whatsapp}
+                    </p>
+                  </div>
+
+                  {/* Números Atribuídos */}
+                  <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-left space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-800">
+                      <span>Valor Recebido:</span>
+                      <span className="text-emerald-400 font-extrabold text-sm font-mono">
+                        {formatarMoeda(manualSucesso.valor)}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-xs text-amber-400 font-bold block mb-1.5">
+                        Números da Sorte ({manualSucesso.cotas.length} {manualSucesso.cotas.length === 1 ? 'cota' : 'cotas'}):
+                      </span>
+                      <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                        {manualSucesso.cotas.map((num) => (
+                          <span
+                            key={num}
+                            className="px-2.5 py-1 bg-amber-400/20 border border-amber-400/40 text-amber-300 rounded-lg text-xs font-mono font-bold"
+                          >
+                            {formatarNumeroCota(num)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Ações pós-lançamento */}
+                  <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+                    <button
+                      onClick={() => copiarReciboWhatsapp(manualSucesso)}
+                      className="w-full sm:flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center space-x-2 transition cursor-pointer shadow-md"
+                    >
+                      {copiouRecibo ? (
+                        <>
+                          <Check className="w-4 h-4 text-emerald-950" />
+                          <span>Mensagem Copiada!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          <span>Copiar Comprovante p/ WhatsApp do Comprador</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setManualSucesso(null);
+                        setManualErro(null);
+                      }}
+                      className="w-full sm:w-auto py-3 px-5 rounded-xl font-bold text-xs sm:text-sm bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                    >
+                      + Lançar Outra Venda
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Formulário de Venda Manual */
+                <form onSubmit={handleLancarVendaManual} className="space-y-4">
+                  {manualErro && (
+                    <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-200 text-xs flex items-center space-x-2">
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                      <span>{manualErro}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">
+                        Nome Completo do Comprador <span className="text-amber-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={manualNome}
+                        onChange={(e) => setManualNome(e.target.value)}
+                        placeholder="Ex: Maria de Lourdes Silva"
+                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">
+                        WhatsApp / Celular com DDD <span className="text-amber-400">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        value={manualWhatsapp}
+                        onChange={(e) => setManualWhatsapp(mascararWhatsApp(e.target.value))}
+                        placeholder="(61) 98765-4321"
+                        maxLength={15}
+                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">
+                        CPF do Comprador <span className="text-slate-500">(Opcional se pagar em dinheiro)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={manualCpf}
+                        onChange={(e) => setManualCpf(mascararCPF(e.target.value))}
+                        placeholder="000.000.000-00 (Opcional)"
+                        maxLength={14}
+                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">
+                        Forma de Pagamento Recebida <span className="text-amber-400">*</span>
+                      </label>
+                      <select
+                        value={manualFormaPagamento}
+                        onChange={(e: any) => setManualFormaPagamento(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:border-emerald-400"
+                      >
+                        <option value="dinheiro">💵 Dinheiro em Espécie (Pago em Mãos)</option>
+                        <option value="pix_direto">📱 Pix Direto na Conta (Comprovante em Mãos)</option>
+                        <option value="maquininha">💳 Cartão Presencial / Maquininha</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Modo de Escolha de Cotas */}
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">
+                        Seleção de Cotas
+                      </span>
+                      <div className="flex items-center space-x-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setManualModoEscolha('combo')}
+                          className={`px-3 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                            manualModoEscolha === 'combo'
+                              ? 'bg-amber-400 text-slate-950'
+                              : 'bg-slate-800 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Combos Rápidos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setManualModoEscolha('especifico')}
+                          className={`px-3 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                            manualModoEscolha === 'especifico'
+                              ? 'bg-amber-400 text-slate-950'
+                              : 'bg-slate-800 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Digitar Números
+                        </button>
+                      </div>
+                    </div>
+
+                    {manualModoEscolha === 'combo' ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                        {[
+                          { qtd: 1, label: '1 Cota', val: 20 },
+                          { qtd: 3, label: '3 Cotas (Combo)', val: 50 },
+                          { qtd: 7, label: '7 Cotas (Liderança)', val: 100 },
+                          { qtd: 15, label: '15 Cotas (Patrocinador)', val: 200 },
+                        ].map((combo) => (
+                          <button
+                            key={combo.qtd}
+                            type="button"
+                            onClick={() => setManualQtd(combo.qtd)}
+                            className={`p-3 rounded-xl border text-center transition cursor-pointer ${
+                              manualQtd === combo.qtd
+                                ? 'bg-amber-400/10 border-amber-400 text-amber-300 ring-1 ring-amber-400'
+                                : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                            }`}
+                          >
+                            <span className="block text-xs font-bold">{combo.label}</span>
+                            <span className="block text-sm font-black text-white mt-0.5">
+                              {formatarMoeda(combo.val)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 pt-1">
+                        <label className="block text-[11px] text-slate-400">
+                          Digite os números das cotas desejadas separados por vírgula ou espaço (ex: <code>007, 042, 115</code>):
+                        </label>
+                        <input
+                          type="text"
+                          value={manualNumerosTexto}
+                          onChange={(e) => setManualNumerosTexto(e.target.value)}
+                          placeholder="Ex: 7, 14, 25, 100"
+                          className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono text-amber-300 placeholder-slate-600 focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+                    )}
+
+                    {/* Resumo do Valor */}
+                    <div className="pt-2 flex items-center justify-between border-t border-slate-800/80 text-xs">
+                      <span className="text-slate-400">
+                        {manualModoEscolha === 'combo'
+                          ? `${manualQtd} ${manualQtd === 1 ? 'cota automática' : 'cotas automáticas'}`
+                          : 'Cotas digitadas'}
+                      </span>
+                      <div className="text-right">
+                        <span className="text-slate-400 text-[11px] block">Valor a Cobrar:</span>
+                        <span className="text-base font-extrabold text-emerald-400">
+                          {formatarMoeda(
+                            calcularValorTotal(
+                              manualModoEscolha === 'combo'
+                                ? manualQtd
+                                : manualNumerosTexto
+                                    .split(/[,;\s]+/)
+                                    .map((p) => parseInt(p.trim(), 10))
+                                    .filter((n) => !isNaN(n) && n >= 1 && n <= 500).length
+                            )
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Botão de Envio */}
+                  <button
+                    type="submit"
+                    disabled={manualSalvando}
+                    className="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white flex items-center justify-center space-x-2 transition cursor-pointer shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                  >
+                    {manualSalvando ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Registrando Venda...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCheck className="w-5 h-5" />
+                        <span>Confirmar e Marcar como PAGO Imediatamente</span>
+                      </>
+                    )}
+                  </button>
+                </form>
               )}
             </div>
           )}
