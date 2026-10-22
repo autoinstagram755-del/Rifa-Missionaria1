@@ -87,24 +87,6 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Faixa sutil de status de conexão */}
-      <div className="bg-slate-950/80 border-t border-slate-800/60 px-4 py-1 text-[11px] text-slate-400 flex items-center justify-between">
-        <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>
-              {isSupabaseConfigured
-                ? 'Supabase Conectado (tnnrppcrcakipkmfedmm)'
-                : 'Modo Demonstração Ativo (Pronto para Uso & Testes)'}
-            </span>
-          </div>
-          <div className="flex items-center space-x-2 text-slate-400">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Pagamento Seguro via InfinitePay Pix</span>
-          </div>
-        </div>
-      </div>
     </header>
   );
 };

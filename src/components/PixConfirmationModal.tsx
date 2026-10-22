@@ -14,7 +14,6 @@ import {
   ExternalLink,
   Phone,
   CreditCard,
-  Send,
   UserCheck,
 } from 'lucide-react';
 import {
@@ -55,7 +54,6 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
   onPagamentoConfirmado,
 }) => {
   const [copiadoPix, setCopiadoPix] = useState(false);
-  const [copiadoChave, setCopiadoChave] = useState(false);
   const [segundosRestantes, setSegundosRestantes] = useState(15 * 60);
   const [statusPagamento, setStatusPagamento] = useState<'pendente' | 'pago'>('pendente');
   const [verificando, setVerificando] = useState(false);
@@ -142,30 +140,12 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
     }
   };
 
-  const copiarChaveCelular = async () => {
-    try {
-      await navigator.clipboard.writeText(chaveNumeros);
-      setCopiadoChave(true);
-      setTimeout(() => setCopiadoChave(false), 3000);
-    } catch (e) {
-      console.error('Falha ao copiar chave:', e);
-    }
-  };
-
   const confirmarPagamentoManual = async () => {
     setVerificando(true);
     await atualizarStatusPedido(dadosPedido.pedido_id, 'pago');
     setStatusPagamento('pago');
     setVerificando(false);
     onPagamentoConfirmado(dadosPedido.pedido_id);
-  };
-
-  const enviarComprovanteWhatsApp = () => {
-    const cotasStr = dadosPedido.cotas_numeros.map((n) => formatarNumeroCota(n)).join(', ');
-    const msg = encodeURIComponent(
-      `Paz do Senhor, Pastor Jocimar!\n\nAcabei de participar da Ação Solidária: Missão & Cooperação.\n\n👤 Nome: ${dadosPedido.nome_comprador}\n🎟️ Cotas: ${cotasStr} (${dadosPedido.quantidade_cotas} cotas)\n💰 Valor: ${formatarMoeda(dadosPedido.valor_total)}\n🧾 Pedido: #${dadosPedido.pedido_id.slice(-8).toUpperCase()}\n\nEstou enviando o meu comprovante de pagamento Pix!`
-    );
-    window.open(`https://wa.me/55${chaveNumeros}?text=${msg}`, '_blank');
   };
 
   const compartilharWhatsAppAmigos = () => {
@@ -240,19 +220,11 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
             {/* Ações */}
             <div className="space-y-2 pt-2">
               <button
-                onClick={enviarComprovanteWhatsApp}
+                onClick={compartilharWhatsAppAmigos}
                 className="w-full py-3 px-4 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center space-x-2 transition cursor-pointer shadow-md"
               >
-                <Send className="w-4 h-4" />
-                <span>Enviar Comprovante ao Pastor no WhatsApp</span>
-              </button>
-
-              <button
-                onClick={compartilharWhatsAppAmigos}
-                className="w-full py-2.5 px-4 rounded-xl font-semibold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center space-x-2 transition cursor-pointer"
-              >
                 <Share2 className="w-4 h-4" />
-                <span>Compartilhar com Amigos</span>
+                <span>Compartilhar Ação com Amigos</span>
               </button>
 
               <button
@@ -299,18 +271,9 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 flex items-center space-x-1">
                   <Phone className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Chave Pix (Celular):</span>
+                  <span>Chave Pix Cadastrada:</span>
                 </span>
-                <div className="flex items-center space-x-1.5">
-                  <span className="font-mono text-amber-300 font-bold">{chaveFormatada}</span>
-                  <button
-                    onClick={copiarChaveCelular}
-                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer text-[10px]"
-                    title="Copiar número do telefone"
-                  >
-                    {copiadoChave ? '✓' : 'Copiar'}
-                  </button>
-                </div>
+                <span className="font-mono text-amber-300 font-bold">{chaveFormatada}</span>
               </div>
             </div>
 
@@ -359,13 +322,13 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
               </div>
             </div>
 
-            {/* Botão de Já Paguei e Enviar Comprovante */}
-            <div className="space-y-2 pt-1">
+            {/* Botão de Já Paguei */}
+            <div className="pt-1">
               <button
                 type="button"
                 onClick={confirmarPagamentoManual}
                 disabled={verificando}
-                className="w-full py-3 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white flex items-center justify-center space-x-2 transition cursor-pointer shadow-lg shadow-emerald-500/20"
+                className="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white flex items-center justify-center space-x-2 transition cursor-pointer shadow-lg shadow-emerald-500/20"
               >
                 {verificando ? (
                   <>
@@ -378,15 +341,6 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
                     <span>Já Fiz o Pagamento (Ver Meus Números)</span>
                   </>
                 )}
-              </button>
-
-              <button
-                type="button"
-                onClick={enviarComprovanteWhatsApp}
-                className="w-full py-2.5 px-4 rounded-xl font-semibold text-xs bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 flex items-center justify-center space-x-2 transition cursor-pointer"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Enviar Comprovante ao Pastor no WhatsApp</span>
               </button>
             </div>
 
