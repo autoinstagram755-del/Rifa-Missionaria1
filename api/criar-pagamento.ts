@@ -1,6 +1,15 @@
 import type { Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
-import { calcularValorTotal, validarCPF, formatarNumeroCota } from '../src/utils/rules.ts';
+import {
+  calcularValorTotal,
+  validarCPF,
+  formatarNumeroCota,
+  gerarPixBacen,
+  CHAVE_PIX_OFICIAL,
+  CHAVE_PIX_FORMATADA,
+  NOME_TITULAR_PIX,
+  CIDADE_PIX,
+} from '../src/utils/rules.ts';
 
 // Chaves do ambiente
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
@@ -13,16 +22,6 @@ const supabaseServiceKey =
 const infinitePayApiKey = process.env.INFINITEPAY_API_KEY || '';
 const infinitePayHandle = process.env.INFINITEPAY_HANDLE || 'jocimar-silva-128';
 const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-
-/**
- * Gera uma string EMV padrão Pix (Copia e Cola) determinística e válida
- */
-function gerarPixCopiaEColaFalso(valor: number, pedidoId: string, nome: string): string {
-  const chavePix = 'missao.acao.solidaria@igreja.org.br';
-  const valorFormatado = valor.toFixed(2);
-  const txid = pedidoId.replace(/-/g, '').slice(0, 25);
-  return `00020126580014br.gov.bcb.pix0136${chavePix}520400005303986540${valorFormatado.length}${valorFormatado}5802BR5915${nome.slice(0, 15)}6009AGUASLIND62070503***6304${txid.slice(0, 4)}`;
-}
 
 export default async function handler(req: Request, res: Response) {
   // Configuração de CORS
@@ -221,9 +220,15 @@ export default async function handler(req: Request, res: Response) {
       checkoutUrl = `https://checkout.infinitepay.io/${effectiveHandle}?amount=${valorEmCentavos}&order_nsu=${pedidoId}`;
     }
 
-    if (!pixCopiaECola) {
-      pixCopiaECola = gerarPixCopiaEColaFalso(valorTotal, pedidoId, nome);
-    }
+    // Gera o código Pix Copia e Cola Oficial (Padrão Banco Central / BR Code com CRC16 válido)
+    const txid = pedidoId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 25);
+    pixCopiaECola = gerarPixBacen(
+      CHAVE_PIX_OFICIAL,
+      NOME_TITULAR_PIX,
+      CIDADE_PIX,
+      valorTotal,
+      txid
+    );
 
     const expiracaoEmMinutos = 15;
     const expiresAt = new Date(Date.now() + expiracaoEmMinutos * 60 * 1000).toISOString();
@@ -245,8 +250,12 @@ export default async function handler(req: Request, res: Response) {
       checkout_url: checkoutUrl,
       pix_copia_cola: pixCopiaECola,
       pix_qr_code_url: pixQrCodeUrl,
+      chave_pix: CHAVE_PIX_OFICIAL,
+      chave_pix_formatada: CHAVE_PIX_FORMATADA,
+      titular_pix: NOME_TITULAR_PIX,
+      cidade_pix: CIDADE_PIX,
       expires_at: expiresAt,
-      mensagem: 'Cotas reservadas e link InfinitePay gerado com sucesso!',
+      mensagem: 'Cotas reservadas e Pix oficial gerado com sucesso!',
     });
   } catch (err: any) {
     console.error('Erro em /api/criar-pagamento:', err);

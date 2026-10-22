@@ -18,6 +18,11 @@ import {
   mascararWhatsApp,
   validarCPF,
   validarWhatsApp,
+  gerarPixBacen,
+  CHAVE_PIX_OFICIAL,
+  CHAVE_PIX_FORMATADA,
+  NOME_TITULAR_PIX,
+  CIDADE_PIX,
 } from '../utils/rules.ts';
 
 interface CheckoutModalProps {
@@ -101,10 +106,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
       onSuccessCheckout(data);
     } catch (err: any) {
-      console.warn('Erro ao chamar /api/criar-pagamento, usando fallback local:', err);
-      // Fallback gracioso para modo de teste/demonstração
+      console.warn('Erro ao chamar /api/criar-pagamento, usando fallback local com Pix Oficial:', err);
+      // Fallback com Pix Oficial Padrão Banco Central
       const pedidoMockId = `ped-${Date.now()}`;
-      const fakeCopiaECola = `00020126580014br.gov.bcb.pix0136missao.acao.solidaria@igreja.org.br520400005303986540${valorTotal.toFixed(2).length}${valorTotal.toFixed(2)}5802BR5915${nome.slice(0, 15)}6009AGUASLIND62070503***6304DEMO`;
+      const pixOficial = gerarPixBacen(
+        CHAVE_PIX_OFICIAL,
+        NOME_TITULAR_PIX,
+        CIDADE_PIX,
+        valorTotal,
+        pedidoMockId.slice(-8)
+      );
       
       onSuccessCheckout({
         success: true,
@@ -116,8 +127,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         quantidade_cotas: qtdCotas,
         cotas_numeros: cotasEscolhidas.length > 0 ? cotasEscolhidas : Array.from({ length: qtdCotas }, (_, i) => i + 101),
         status: 'pendente',
-        pix_copia_cola: fakeCopiaECola,
+        pix_copia_cola: pixOficial,
         pix_qr_code_url: '',
+        chave_pix: CHAVE_PIX_OFICIAL,
+        chave_pix_formatada: CHAVE_PIX_FORMATADA,
+        titular_pix: NOME_TITULAR_PIX,
+        checkout_url: `https://checkout.infinitepay.io/jocimar-silva-128?amount=${Math.round(valorTotal * 100)}&order_nsu=${pedidoMockId}`,
         expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       });
     } finally {

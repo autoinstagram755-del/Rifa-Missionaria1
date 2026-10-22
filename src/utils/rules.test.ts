@@ -65,3 +65,27 @@ test('estatísticas de cotas calculam proporções corretas', () => {
   assert.equal(stats.disponiveis, 1);
   assert.equal(stats.percentualPago, 50);
 });
+
+test('geração de Pix padrão Banco Central (BR Code / EMV) com CRC16 válido', async () => {
+  const { gerarPixBacen, calcularCRC16, CHAVE_PIX_OFICIAL, NOME_TITULAR_PIX } = await import('./rules.ts');
+  const pix = gerarPixBacen(CHAVE_PIX_OFICIAL, NOME_TITULAR_PIX, 'Aguas Lindas', 50.0);
+
+  // Deve iniciar com o cabeçalho padrão 000201
+  assert.equal(pix.startsWith('000201'), true);
+  // Deve conter o GUI do Pix do Banco Central
+  assert.equal(pix.includes('br.gov.bcb.pix'), true);
+  // Deve conter a chave telefone formatada com +55
+  assert.equal(pix.includes('+5561992274858'), true);
+  // Deve conter o nome do titular sem acentos em maiúsculo
+  assert.equal(pix.includes('JOCIMAR DA SILVA ARAUJO'), true);
+  // Deve conter o valor 50.00
+  assert.equal(pix.includes('50.00'), true);
+  // Deve terminar com o campo 6304 + 4 caracteres hexadecimais de CRC
+  assert.match(pix, /6304[0-9A-F]{4}$/);
+
+  // Validação reversa do CRC16
+  const payloadSemCRC = pix.slice(0, -4);
+  const crcCalculado = calcularCRC16(payloadSemCRC);
+  assert.equal(pix.endsWith(crcCalculado), true);
+});
+

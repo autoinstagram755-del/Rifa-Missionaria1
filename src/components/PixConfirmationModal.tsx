@@ -7,14 +7,24 @@ import {
   Clock,
   QrCode,
   ShieldCheck,
-  AlertCircle,
   Share2,
   Sparkles,
   CheckCircle2,
   RefreshCw,
   ExternalLink,
+  Phone,
+  CreditCard,
+  Send,
+  UserCheck,
 } from 'lucide-react';
-import { formatarMoeda, formatarNumeroCota } from '../utils/rules.ts';
+import {
+  formatarMoeda,
+  formatarNumeroCota,
+  CHAVE_PIX_OFICIAL,
+  CHAVE_PIX_FORMATADA,
+  NOME_TITULAR_PIX,
+  CIDADE_PIX,
+} from '../utils/rules.ts';
 import { atualizarStatusPedido } from '../lib/supabase.ts';
 
 interface PixConfirmationModalProps {
@@ -31,6 +41,9 @@ interface PixConfirmationModalProps {
     pix_copia_cola: string;
     expires_at?: string;
     checkout_url?: string;
+    chave_pix?: string;
+    chave_pix_formatada?: string;
+    titular_pix?: string;
   } | null;
   onPagamentoConfirmado: (pedidoId: string) => void;
 }
@@ -41,11 +54,16 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
   dadosPedido,
   onPagamentoConfirmado,
 }) => {
-  const [copiado, setCopiado] = useState(false);
+  const [copiadoPix, setCopiadoPix] = useState(false);
+  const [copiadoChave, setCopiadoChave] = useState(false);
   const [segundosRestantes, setSegundosRestantes] = useState(15 * 60);
   const [statusPagamento, setStatusPagamento] = useState<'pendente' | 'pago'>('pendente');
   const [verificando, setVerificando] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const titular = dadosPedido?.titular_pix || NOME_TITULAR_PIX;
+  const chaveFormatada = dadosPedido?.chave_pix_formatada || CHAVE_PIX_FORMATADA;
+  const chaveNumeros = dadosPedido?.chave_pix || CHAVE_PIX_OFICIAL;
 
   // Renderiza o QR Code no Canvas
   useEffect(() => {
@@ -54,7 +72,7 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
         canvasRef.current,
         dadosPedido.pix_copia_cola,
         {
-          width: 220,
+          width: 210,
           margin: 2,
           color: {
             dark: '#020617',
@@ -86,7 +104,7 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
     return () => clearInterval(interval);
   }, [isOpen, statusPagamento]);
 
-  // Polling automático sutil para verificar se webhook confirmou
+  // Polling automático sutil para verificar status no Supabase
   useEffect(() => {
     if (!isOpen || !dadosPedido?.pedido_id || statusPagamento === 'pago') return;
 
@@ -114,17 +132,27 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
   const segundos = segundosRestantes % 60;
   const tempoFormatado = `${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
 
-  const copiarChave = async () => {
+  const copiarPixCopiaECola = async () => {
     try {
       await navigator.clipboard.writeText(dadosPedido.pix_copia_cola);
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 3000);
+      setCopiadoPix(true);
+      setTimeout(() => setCopiadoPix(false), 3000);
     } catch (e) {
       console.error('Falha ao copiar:', e);
     }
   };
 
-  const simularPagamentoAprovado = async () => {
+  const copiarChaveCelular = async () => {
+    try {
+      await navigator.clipboard.writeText(chaveNumeros);
+      setCopiadoChave(true);
+      setTimeout(() => setCopiadoChave(false), 3000);
+    } catch (e) {
+      console.error('Falha ao copiar chave:', e);
+    }
+  };
+
+  const confirmarPagamentoManual = async () => {
     setVerificando(true);
     await atualizarStatusPedido(dadosPedido.pedido_id, 'pago');
     setStatusPagamento('pago');
@@ -132,7 +160,15 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
     onPagamentoConfirmado(dadosPedido.pedido_id);
   };
 
-  const compartilharWhatsApp = () => {
+  const enviarComprovanteWhatsApp = () => {
+    const cotasStr = dadosPedido.cotas_numeros.map((n) => formatarNumeroCota(n)).join(', ');
+    const msg = encodeURIComponent(
+      `Paz do Senhor, Pastor Jocimar!\n\nAcabei de participar da Ação Solidária: Missão & Cooperação.\n\n👤 Nome: ${dadosPedido.nome_comprador}\n🎟️ Cotas: ${cotasStr} (${dadosPedido.quantidade_cotas} cotas)\n💰 Valor: ${formatarMoeda(dadosPedido.valor_total)}\n🧾 Pedido: #${dadosPedido.pedido_id.slice(-8).toUpperCase()}\n\nEstou enviando o meu comprovante de pagamento Pix!`
+    );
+    window.open(`https://wa.me/55${chaveNumeros}?text=${msg}`, '_blank');
+  };
+
+  const compartilharWhatsAppAmigos = () => {
     const texto = encodeURIComponent(
       `Acabei de semear na Ação Solidária: Missão & Cooperação! Minhas cotas da sorte são: ${dadosPedido.cotas_numeros
         .map((n) => formatarNumeroCota(n))
@@ -161,11 +197,11 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
 
             <div className="space-y-1">
               <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                Pagamento Confirmado com Sucesso!
+                Pagamento Registrado com Sucesso!
               </span>
               <h3 className="text-2xl font-black text-white">Deus Abençoe Sua Semeadura!</h3>
               <p className="text-xs sm:text-sm text-slate-300 max-w-sm mx-auto">
-                Suas cotas foram registradas com sucesso em nome de{' '}
+                Suas cotas foram reservadas com sucesso para{' '}
                 <strong className="text-amber-300">{dadosPedido.nome_comprador}</strong>.
               </p>
             </div>
@@ -174,7 +210,7 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
             <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-left space-y-3">
               <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-800">
                 <span>Pedido #{dadosPedido.pedido_id.slice(-8).toUpperCase()}</span>
-                <span className="text-emerald-400 font-semibold">100% Quitada</span>
+                <span className="text-emerald-400 font-semibold">100% Confirmado</span>
               </div>
 
               <div>
@@ -204,37 +240,45 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
             {/* Ações */}
             <div className="space-y-2 pt-2">
               <button
-                onClick={compartilharWhatsApp}
+                onClick={enviarComprovanteWhatsApp}
                 className="w-full py-3 px-4 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center space-x-2 transition cursor-pointer shadow-md"
               >
+                <Send className="w-4 h-4" />
+                <span>Enviar Comprovante ao Pastor no WhatsApp</span>
+              </button>
+
+              <button
+                onClick={compartilharWhatsAppAmigos}
+                className="w-full py-2.5 px-4 rounded-xl font-semibold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center space-x-2 transition cursor-pointer"
+              >
                 <Share2 className="w-4 h-4" />
-                <span>Compartilhar no WhatsApp</span>
+                <span>Compartilhar com Amigos</span>
               </button>
 
               <button
                 onClick={onClose}
-                className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition cursor-pointer"
+                className="w-full py-2 px-4 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition cursor-pointer"
               >
                 Fechar Comprovante
               </button>
             </div>
           </div>
         ) : (
-          /* TELA DE PAGAMENTO PIX */
+          /* TELA DE PAGAMENTO PIX OFICIAL */
           <div className="space-y-5">
             <div className="text-center space-y-1">
               <div className="inline-flex items-center space-x-1.5 text-xs font-bold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
                 <QrCode className="w-3.5 h-3.5" />
-                <span>PIX INFINITEPAY • PAGAMENTO INSTANTÂNEO</span>
+                <span>PIX OFICIAL BANCO CENTRAL • DIRETO NA CONTA</span>
               </div>
               <h3 className="text-2xl font-extrabold text-white">Efetue o Pagamento Pix</h3>
               <p className="text-xs sm:text-sm text-slate-300">
-                Escaneie o QR Code no app do seu banco ou use a chave Copia e Cola abaixo.
+                Escaneie o QR Code no app do seu banco ou use a chave Copia e Cola.
               </p>
             </div>
 
             {/* Cronômetro */}
-            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs">
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 text-xs">
               <div className="flex items-center space-x-2 text-slate-300">
                 <Clock className="w-4 h-4 text-amber-400" />
                 <span>Tempo restante para pagar:</span>
@@ -242,19 +286,50 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
               <span className="font-mono font-bold text-amber-400 text-sm">{tempoFormatado}</span>
             </div>
 
-            {/* QR Code Container */}
-            <div className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl shadow-inner max-w-xs mx-auto">
-              <canvas ref={canvasRef} className="rounded-lg shadow-sm" />
-              <span className="text-[11px] font-semibold text-slate-900 mt-2 text-center">
-                Valor: <strong>{formatarMoeda(dadosPedido.valor_total)}</strong>
-              </span>
+            {/* Dados do Titular do Pix (Transparência Total) */}
+            <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 flex items-center space-x-1">
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Titular da Conta:</span>
+                </span>
+                <strong className="text-white font-bold">{titular}</strong>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 flex items-center space-x-1">
+                  <Phone className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Chave Pix (Celular):</span>
+                </span>
+                <div className="flex items-center space-x-1.5">
+                  <span className="font-mono text-amber-300 font-bold">{chaveFormatada}</span>
+                  <button
+                    onClick={copiarChaveCelular}
+                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer text-[10px]"
+                    title="Copiar número do telefone"
+                  >
+                    {copiadoChave ? '✓' : 'Copiar'}
+                  </button>
+                </div>
+              </div>
             </div>
 
-            {/* Pix Copia e Cola */}
+            {/* QR Code Container */}
+            <div className="flex flex-col items-center justify-center p-3.5 bg-white rounded-2xl shadow-inner max-w-xs mx-auto">
+              <canvas ref={canvasRef} className="rounded-lg shadow-sm" />
+              <div className="text-center mt-2">
+                <span className="text-[11px] text-slate-600 block">Valor da Semeadura:</span>
+                <span className="text-base font-extrabold text-slate-950">
+                  {formatarMoeda(dadosPedido.valor_total)}
+                </span>
+              </div>
+            </div>
+
+            {/* Pix Copia e Cola com 1-clique */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>Código Pix Copia e Cola:</span>
-                <span className="text-[11px] text-amber-400 font-medium">1-clique para copiar</span>
+                <span className="text-[11px] text-amber-400 font-medium">Compatível com todos os bancos</span>
               </div>
 
               <div className="relative">
@@ -262,14 +337,14 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
                   type="text"
                   readOnly
                   value={dadosPedido.pix_copia_cola}
-                  className="w-full pl-3 pr-28 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-mono text-slate-300 focus:outline-none"
+                  className="w-full pl-3 pr-28 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-mono text-slate-300 focus:outline-none select-all"
                 />
                 <button
                   type="button"
-                  onClick={copiarChave}
+                  onClick={copiarPixCopiaECola}
                   className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold flex items-center space-x-1 transition cursor-pointer shadow-sm"
                 >
-                  {copiado ? (
+                  {copiadoPix ? (
                     <>
                       <Check className="w-3.5 h-3.5 text-emerald-950" />
                       <span>Copiado!</span>
@@ -284,53 +359,67 @@ export const PixConfirmationModal: React.FC<PixConfirmationModalProps> = ({
               </div>
             </div>
 
-            {/* Resumo das Cotas Reservadas */}
-            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-300 space-y-1">
-              <div className="flex justify-between">
-                <span>Cotas Reservadas:</span>
-                <span className="font-mono text-amber-300 font-bold max-w-[200px] truncate">
-                  {dadosPedido.cotas_numeros.map((n) => formatarNumeroCota(n)).join(', ')}
-                </span>
-              </div>
-              <div className="flex justify-between text-slate-400 text-[11px]">
-                <span>Titular:</span>
-                <span>{dadosPedido.nome_comprador}</span>
-              </div>
-            </div>
-
-            {/* Botão para Abrir Checkout Oficial da InfinitePay (Cartão ou Pix) */}
-            {dadosPedido.checkout_url && (
-              <div className="pt-1">
-                <a
-                  href={dadosPedido.checkout_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-3 px-4 rounded-xl font-bold text-xs sm:text-sm bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center space-x-2 transition cursor-pointer shadow-md"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  <span>Pagar no Cartão ou App InfinitePay</span>
-                </a>
-              </div>
-            )}
-
-            {/* Botão de Verificação & Simulação de Teste */}
+            {/* Botão de Já Paguei e Enviar Comprovante */}
             <div className="space-y-2 pt-1">
               <button
                 type="button"
-                onClick={simularPagamentoAprovado}
+                onClick={confirmarPagamentoManual}
                 disabled={verificando}
-                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold text-emerald-300 bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/40 flex items-center justify-center space-x-2 transition cursor-pointer"
-                title="Simula o retorno instantâneo do Webhook da InfinitePay para testar o fluxo de ponta a ponta"
+                className="w-full py-3 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white flex items-center justify-center space-x-2 transition cursor-pointer shadow-lg shadow-emerald-500/20"
               >
-                <Sparkles className="w-4 h-4 text-emerald-400" />
-                <span>Simular Confirmação Pix (Modo Teste)</span>
+                {verificando ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Confirmando Pagamento...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Já Fiz o Pagamento (Ver Meus Números)</span>
+                  </>
+                )}
               </button>
 
-              <div className="flex items-center justify-center space-x-1.5 text-[11px] text-slate-400">
-                <RefreshCw className="w-3 h-3 text-slate-500 animate-spin" />
-                <span>Aguardando confirmação automática via Webhook InfinitePay...</span>
-              </div>
+              <button
+                type="button"
+                onClick={enviarComprovanteWhatsApp}
+                className="w-full py-2.5 px-4 rounded-xl font-semibold text-xs bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 flex items-center justify-center space-x-2 transition cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Enviar Comprovante ao Pastor no WhatsApp</span>
+              </button>
             </div>
+
+            {/* O Melhor dos 2 Mundos: Opção Cartão de Crédito via InfinitePay */}
+            {dadosPedido.checkout_url && (
+              <div className="pt-2 border-t border-slate-800">
+                <div className="p-3 rounded-2xl bg-gradient-to-r from-blue-950/40 to-slate-900 border border-blue-600/30 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="flex items-center space-x-2.5 text-left">
+                    <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
+                      <CreditCard className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-white block">
+                        Prefere pagar com Cartão de Crédito?
+                      </span>
+                      <span className="text-[11px] text-slate-400 block">
+                        Pague em até 12x com segurança pela InfinitePay
+                      </span>
+                    </div>
+                  </div>
+
+                  <a
+                    href={dadosPedido.checkout_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white flex items-center space-x-1.5 transition cursor-pointer shadow-sm"
+                  >
+                    <span>Pagar no Cartão</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

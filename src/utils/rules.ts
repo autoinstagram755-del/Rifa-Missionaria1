@@ -206,3 +206,92 @@ export function calcularEstatisticas(
     percentualMeta,
   };
 }
+
+// Configurações Oficiais do Recebedor Pix
+export const CHAVE_PIX_OFICIAL = '61992274858';
+export const CHAVE_PIX_FORMATADA = '(61) 99227-4858';
+export const NOME_TITULAR_PIX = 'Jocimar da Silva Araujo';
+export const CIDADE_PIX = 'Aguas Lindas';
+
+/**
+ * Calcula o checksum CRC16-CCITT (polinômio 0x1021, valor inicial 0xFFFF)
+ * exigido pelo padrão BR Code do Banco Central do Brasil para o Pix
+ */
+export function calcularCRC16(str: string): string {
+  let crc = 0xffff;
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 0x8000) !== 0) {
+        crc = ((crc << 1) ^ 0x1021) & 0xffff;
+      } else {
+        crc = (crc << 1) & 0xffff;
+      }
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+}
+
+/**
+ * Formata um campo no padrão EMV (Tag + Tamanho de 2 dígitos + Valor)
+ */
+function emvField(id: string, value: string): string {
+  const len = String(value.length).padStart(2, '0');
+  return id + len + value;
+}
+
+/**
+ * Gera o payload oficial do Pix Copia e Cola (BR Code)
+ * Válido em qualquer banco brasileiro
+ */
+export function gerarPixBacen(
+  chave: string = CHAVE_PIX_OFICIAL,
+  nome: string = NOME_TITULAR_PIX,
+  cidade: string = CIDADE_PIX,
+  valor?: number,
+  txid: string = '***'
+): string {
+  const nomeLimpo = nome
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .slice(0, 25);
+  const cidadeLimpa = cidade
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .slice(0, 15);
+
+  let chaveFormatada = chave.trim();
+  // Se for telefone celular brasileiro (10 ou 11 dígitos), formata para o padrão internacional +55...
+  if (/^\d{10,11}$/.test(chaveFormatada)) {
+    chaveFormatada = '+55' + chaveFormatada;
+  }
+
+  const gui = emvField('00', 'br.gov.bcb.pix');
+  const key = emvField('01', chaveFormatada);
+  const merchantAccount = emvField('26', gui + key);
+
+  let payload =
+    emvField('00', '01') +
+    merchantAccount +
+    emvField('52', '0000') +
+    emvField('53', '986');
+
+  if (valor && valor > 0) {
+    payload += emvField('54', Number(valor).toFixed(2));
+  }
+
+  payload +=
+    emvField('58', 'BR') +
+    emvField('59', nomeLimpo) +
+    emvField('60', cidadeLimpa);
+
+  const additionalData = emvField('05', txid || '***');
+  payload += emvField('62', additionalData);
+  payload += '6304';
+
+  const crc = calcularCRC16(payload);
+  return payload + crc;
+}
+
