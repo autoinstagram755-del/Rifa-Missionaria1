@@ -76,6 +76,14 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (supabaseClient) {
+      // Libera automaticamente qualquer cota com reserva expirada (+3h) antes de verificar disponibilidade
+      try {
+        const { executarLiberacaoExpiradas } = await import('./expirar-reservas.ts');
+        await executarLiberacaoExpiradas();
+      } catch (eExp) {
+        // Ignora silenciosamente para não interromper a reserva
+      }
+
       // Se o usuário selecionou números específicos
       if (Array.isArray(numerosEscolhidos) && numerosEscolhidos.length === qtd) {
         const { data: cotasDisponiveis, error: errVerif } = await supabaseClient

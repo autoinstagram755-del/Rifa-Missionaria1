@@ -44,21 +44,24 @@ async function startServer() {
   });
 
   // Rotina em segundo plano no servidor para expirar reservas com mais de 3 horas
-  setInterval(() => {
-    // Chamada interna simulada
+  const rodarExpiracao = () => {
     const fakeReq: any = { method: 'GET', headers: {} };
     const fakeRes: any = {
       setHeader: () => {},
       status: () => ({
         json: (dados: any) => {
-          if (dados && dados.pedidos_cancelados > 0) {
+          if (dados && (dados.pedidos_cancelados > 0 || dados.cotas_liberadas > 0)) {
             console.log(`[Auto-Expirar 3h] ${dados.pedidos_cancelados} pedidos cancelados e ${dados.cotas_liberadas} cotas liberadas.`);
           }
         },
       }),
     };
     expirarReservasHandler(fakeReq, fakeRes).catch(() => {});
-  }, 60000);
+  };
+
+  // Executa imediatamente na inicialização do servidor e depois periodicamente a cada 60s
+  rodarExpiracao();
+  setInterval(rodarExpiracao, 60000);
 
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
