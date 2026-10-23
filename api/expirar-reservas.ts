@@ -1,18 +1,19 @@
+import 'dotenv/config';
 import type { Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const supabaseServiceKey =
-  process.env.SUPABASE_SECRET_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_PUBLISHABLE_KEY ||
-  process.env.VITE_SUPABASE_ANON_KEY ||
-  '';
 
 // 3 horas = 10.800.000 ms
 const TEMPO_EXPIRACAO_MS = 3 * 60 * 60 * 1000;
 
 export default async function handler(req: Request, res: Response) {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const supabaseServiceKey =
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    '';
+
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -47,7 +48,6 @@ export default async function handler(req: Request, res: Response) {
           .from('pedidos')
           .update({
             status_pagamento: 'cancelado',
-            updated_at: new Date().toISOString(),
           })
           .in('id', ids);
 
@@ -57,7 +57,6 @@ export default async function handler(req: Request, res: Response) {
           .update({
             status: 'disponivel',
             pedido_id: null,
-            updated_at: new Date().toISOString(),
           })
           .in('pedido_id', ids)
           .select('numero');

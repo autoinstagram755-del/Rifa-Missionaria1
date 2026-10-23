@@ -24,6 +24,7 @@ import {
   ComboItem,
   TOTAL_COTAS,
 } from './utils/rules.ts';
+import { registrarLogAuditoria } from './lib/auditLogs.ts';
 
 export default function App() {
   const [cotas, setCotas] = useState<Cota[]>([]);
@@ -70,21 +71,31 @@ export default function App() {
     const slug = urlParams.get('slug');
 
     if (orderNsu) {
-      // Consulta o pedido e exibe o comprovante
+      // Limpa os parâmetros de busca para não travar o estado na URL em novos acessos
+      if (typeof window !== 'undefined' && window.history?.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      // Consulta o pedido e exibe o comprovante ou tela de pagamento correspondente
       fetch(`/api/consultar-pedido?id=${orderNsu}&slug=${slug || ''}&transaction_nsu=${transactionNsu || ''}`)
         .then((res) => res.json())
         .then((data) => {
           if (data && data.id) {
-            handlePagamentoConfirmado(data.id);
+            const isPago = data.status_pagamento === 'pago';
+            if (isPago) {
+              handlePagamentoConfirmado(data.id);
+            }
             setDadosPedidoAtual({
               pedido_id: data.id,
-              nome_comprador: data.nome_comprador || 'Irmão Apoiador',
-              whatsapp: '',
-              cpf: '',
-              valor_total: data.valor_total || 50,
-              quantidade_cotas: data.quantidade_cotas || 3,
-              cotas_numeros: Array.isArray(data.cotas) ? data.cotas.map((c: any) => c.numero) : [1, 2, 3],
-              pix_copia_cola: '',
+              nome_comprador: data.nome_comprador || 'Apoiador Missionário',
+              whatsapp: data.whatsapp || '',
+              cpf: data.cpf || '',
+              valor_total: data.valor_total || 20,
+              quantidade_cotas: data.quantidade_cotas || (Array.isArray(data.cotas) && data.cotas.length > 0 ? data.cotas.length : 1),
+              cotas_numeros: Array.isArray(data.cotas) && data.cotas.length > 0 ? data.cotas.map((c: any) => c.numero) : [101],
+              pix_copia_cola: data.pix_copia_cola || '',
+              status: isPago ? 'pago' : 'pendente',
+              checkout_url: data.checkout_url || '',
             });
             setPixModalOpen(true);
           }
@@ -124,6 +135,7 @@ export default function App() {
 
   // Seleciona combo rápido
   const handleSelectCombo = (combo: ComboItem) => {
+    setDadosPedidoAtual(null);
     // Escolhe aleatoriamente cotas livres para este combo
     const cotasLivres = cotas.filter((c) => c.status === 'disponivel');
     const embaralhadas = [...cotasLivres].sort(() => 0.5 - Math.random());
@@ -150,6 +162,7 @@ export default function App() {
   };
 
   const handleFinalizarSelecao = () => {
+    setDadosPedidoAtual(null);
     setQuantidadeDesejada(cotasSelecionadas.length);
     setCheckoutModalOpen(true);
   };
@@ -182,13 +195,28 @@ export default function App() {
     setCotas(novasCotas);
     salvarCotasLocais(novasCotas);
 
-    setDadosPedidoAtual(dados);
+    setDadosPedidoAtual({
+      ...dados,
+      status: 'pendente',
+    });
     setCheckoutModalOpen(false);
     setPixModalOpen(true);
     setCotasSelecionadas([]);
+
+    registrarLogAuditoria({
+      tipo: 'reserva',
+      titulo: `Reserva Criada: ${dados.quantidade_cotas} cota(s) para ${dados.nome_comprador}`,
+      detalhes: `Reserva de 3h iniciada via ${dados.metodo === 'cartao' ? 'Cartão' : 'Pix'}. Cotas: ${dados.cotas_numeros?.join(', ')}`,
+      cotas: dados.cotas_numeros,
+      pedidoId: dados.pedido_id,
+      comprador: dados.nome_comprador,
+      valor: dados.valor_total,
+      origem: 'usuario_web',
+      status: 'sucesso',
+    });
   };
 
-  // Quando o pagamento é aprovado (via polling, webhook ou simulação de teste)
+  // Quando o pagamento é aprovado (via polling, webhook ou confirmação direta)
   const handlePagamentoConfirmado = (pedidoId: string) => {
     // Atualiza localmente
     setCotas((prev) =>
@@ -197,6 +225,21 @@ export default function App() {
     setPedidos((prev) =>
       prev.map((p) => (p.id === pedidoId ? { ...p, status_pagamento: 'pago' as const } : p))
     );
+
+    const ped = pedidos.find((p) => p.id === pedidoId);
+    registrarLogAuditoria({
+      tipo: 'pagamento',
+      titulo: `Pagamento Confirmado #${pedidoId.slice(0, 8).toUpperCase()}`,
+      detalhes: `Status sincronizado para PAGO. Cotas ativadas no sorteio oficial.`,
+      cotas: ped?.cotas_numeros,
+      pedidoId,
+      comprador: ped?.nome_comprador,
+      valor: ped?.valor_total,
+      origem: 'webhook_infinitepay',
+      status: 'sucesso',
+    });
+
+    carregarDados();
   };
 
   // Navegação suave para seções
@@ -261,7 +304,11 @@ export default function App() {
       {/* Modal de Confirmação Pix com QR Code e Copia e Cola */}
       <PixConfirmationModal
         isOpen={pixModalOpen}
-        onClose={() => setPixModalOpen(false)}
+        onClose={() => {
+          setPixModalOpen(false);
+          setDadosPedidoAtual(null);
+          carregarDados();
+        }}
         dadosPedido={dadosPedidoAtual}
         onPagamentoConfirmado={handlePagamentoConfirmado}
       />

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import type { Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import {
@@ -11,19 +12,19 @@ import {
   CIDADE_PIX,
 } from '../src/utils/rules.ts';
 
-// Chaves do ambiente
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const supabaseServiceKey =
-  process.env.SUPABASE_SECRET_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_PUBLISHABLE_KEY ||
-  process.env.VITE_SUPABASE_ANON_KEY ||
-  '';
-const infinitePayApiKey = process.env.INFINITEPAY_API_KEY || '';
-const infinitePayHandle = process.env.INFINITEPAY_HANDLE || 'jocimar-silva-128';
-const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-
 export default async function handler(req: Request, res: Response) {
+  // Chaves do ambiente
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const supabaseServiceKey =
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    '';
+  const infinitePayApiKey = process.env.INFINITEPAY_API_KEY || '';
+  const infinitePayHandle = process.env.INFINITEPAY_HANDLE || 'jocimar-silva-128';
+  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+
   // Configuração de CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -38,7 +39,8 @@ export default async function handler(req: Request, res: Response) {
   }
 
   try {
-    const { nome, whatsapp, cpf, quantidadeCotas, numerosEscolhidos, handleCustom } = req.body;
+    const { nome, whatsapp, cpf, quantidadeCotas, numerosEscolhidos, handleCustom, metodo } = req.body;
+    const metodoEscolhido = metodo === 'cartao' ? 'cartao' : 'pix';
 
     // 1. Validações básicas
     if (!nome || typeof nome !== 'string' || nome.trim().length < 3) {
@@ -62,7 +64,7 @@ export default async function handler(req: Request, res: Response) {
 
     const valorTotal = calcularValorTotal(qtd);
     const valorEmCentavos = Math.round(valorTotal * 100);
-    const pedidoId = `ped-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const pedidoId = crypto.randomUUID();
     const effectiveHandle = handleCustom?.trim() || infinitePayHandle || 'jocimar-silva-128';
 
     let cotasFinais: number[] = [];
@@ -111,7 +113,7 @@ export default async function handler(req: Request, res: Response) {
         cotasFinais = disponiveis.map((c) => c.numero);
       }
 
-      // Registra o pedido no Supabase
+      // Registra o pedido no Supabase com UUID válido
       const { error: errPedido } = await supabaseClient.from('pedidos').insert({
         id: pedidoId,
         nome_comprador: nome.trim(),
@@ -122,7 +124,6 @@ export default async function handler(req: Request, res: Response) {
         status_pagamento: 'pendente',
         transaction_id_infinitepay: null,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       });
 
       if (errPedido) {
@@ -135,7 +136,6 @@ export default async function handler(req: Request, res: Response) {
         .update({
           status: 'reservado',
           pedido_id: pedidoId,
-          updated_at: new Date().toISOString(),
         })
         .in('numero', cotasFinais);
 
@@ -247,6 +247,7 @@ export default async function handler(req: Request, res: Response) {
       quantidade_cotas: qtd,
       cotas_numeros: cotasFinais,
       status: 'pendente',
+      metodo: metodoEscolhido,
       checkout_url: checkoutUrl,
       pix_copia_cola: pixCopiaECola,
       pix_qr_code_url: pixQrCodeUrl,

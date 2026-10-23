@@ -1,15 +1,16 @@
+import 'dotenv/config';
 import type { Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const supabaseServiceKey =
-  process.env.SUPABASE_SECRET_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_PUBLISHABLE_KEY ||
-  process.env.VITE_SUPABASE_ANON_KEY ||
-  '';
-
 export default async function handler(req: Request, res: Response) {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const supabaseServiceKey =
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    '';
+
   // Apenas requisições POST são aceitas pelo webhook
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método não permitido. Webhook aceita apenas POST.' });
@@ -48,30 +49,50 @@ export default async function handler(req: Request, res: Response) {
     // Atualização no Supabase
     if (supabaseUrl && supabaseServiceKey && !supabaseUrl.includes('your-project')) {
       const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+      const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(orderNsu || '');
 
-      let query = supabaseClient.from('pedidos').update({
-        status_pagamento: 'pago',
-        transaction_id_infinitepay: transactionNsu || invoiceSlug,
-        updated_at: new Date().toISOString(),
-      });
+      let pedidoAtualizado: any = null;
 
-      if (orderNsu) {
-        query = query.eq('id', orderNsu);
-      } else {
-        query = query.eq('transaction_id_infinitepay', transactionNsu);
+      if (isUuid) {
+        const { data, error: errPed } = await supabaseClient
+          .from('pedidos')
+          .update({
+            status_pagamento: 'pago',
+            transaction_id_infinitepay: transactionNsu || invoiceSlug || 'INFINITEPAY_CONFIRMADO',
+          })
+          .eq('id', orderNsu)
+          .select()
+          .single();
+
+        if (errPed) {
+          console.error('[Webhook InfinitePay] Erro ao atualizar pedido por UUID:', errPed);
+        } else {
+          pedidoAtualizado = data;
+        }
       }
 
-      const { data: pedidoAtualizado, error: errPed } = await query.select().single();
+      if (!pedidoAtualizado && transactionNsu) {
+        const { data, error: errTx } = await supabaseClient
+          .from('pedidos')
+          .update({
+            status_pagamento: 'pago',
+            transaction_id_infinitepay: transactionNsu,
+          })
+          .eq('transaction_id_infinitepay', transactionNsu)
+          .select()
+          .single();
 
-      if (errPed) {
-        console.error('[Webhook InfinitePay] Erro ao atualizar pedido no Supabase:', errPed);
-      } else if (pedidoAtualizado) {
+        if (!errTx && data) {
+          pedidoAtualizado = data;
+        }
+      }
+
+      if (pedidoAtualizado) {
         // Atualiza todas as cotas vinculadas ao pedido para status 'pago'
         const { error: errCotas } = await supabaseClient
           .from('cotas')
           .update({
             status: 'pago',
-            updated_at: new Date().toISOString(),
           })
           .eq('pedido_id', pedidoAtualizado.id);
 

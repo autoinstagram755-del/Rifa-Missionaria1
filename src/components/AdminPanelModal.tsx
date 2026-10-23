@@ -25,6 +25,7 @@ import {
   MessageSquare,
   Bell,
   Clock3,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   Pedido,
@@ -44,6 +45,8 @@ import {
   gerarMensagemLembreteWhatsapp,
   TEMPO_EXPIRACAO_RESERVA_MS,
 } from '../utils/rules.ts';
+import { registrarLogAuditoria } from '../lib/auditLogs.ts';
+import { AuditLogsViewer } from './AuditLogsViewer.tsx';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -60,11 +63,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   cotas,
   onRecarregarDados,
 }) => {
-  const [abaAtiva, setAbaAtiva] = useState<'pedidos' | 'venda_manual' | 'lembretes_whatsapp' | 'infinitepay' | 'sql'>('pedidos');
+  const [abaAtiva, setAbaAtiva] = useState<'pedidos' | 'cotas_reservadas' | 'venda_manual' | 'lembretes_whatsapp' | 'infinitepay' | 'logs_auditoria' | 'sql'>('pedidos');
   const [busca, setBusca] = useState('');
   const [copiouSql, setCopiouSql] = useState(false);
   const [testandoWebhook, setTestandoWebhook] = useState(false);
   const [resultadoWebhook, setResultadoWebhook] = useState<string | null>(null);
+  const [sincronizando, setSincronizando] = useState(false);
 
   // Estados para Venda Manual / Balcão
   const [manualNome, setManualNome] = useState('');
@@ -98,25 +102,75 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     .filter((p) => p.status_pagamento === 'pago')
     .reduce((acc, p) => acc + Number(p.valor_total || 0), 0);
 
+  const handleSincronizarSupabase = async () => {
+    setSincronizando(true);
+    try {
+      await onRecarregarDados();
+      registrarLogAuditoria({
+        tipo: 'sincronizacao',
+        titulo: 'Sincronização com o Banco Supabase',
+        detalhes: `Sincronização sob demanda executada pelo Administrador. Dados de ${cotas.length} cotas e ${pedidos.length} pedidos atualizados.`,
+        origem: 'admin_painel',
+        status: 'sucesso',
+      });
+    } catch (err: any) {
+      registrarLogAuditoria({
+        tipo: 'erro',
+        titulo: 'Falha na Sincronização Supabase',
+        detalhes: err.message || 'Erro de rede ou conexão com o banco.',
+        origem: 'admin_painel',
+        status: 'erro',
+      });
+    } finally {
+      setTimeout(() => setSincronizando(false), 500);
+    }
+  };
+
   const pedidosFiltrados = pedidos.filter((p) => {
     if (!busca.trim()) return true;
-    const termo = busca.toLowerCase();
+    const termo = busca.toLowerCase().trim();
+    const numeroBusca = parseInt(termo.replace(/\D/g, ''), 10);
+    const temCota = !isNaN(numeroBusca) && p.cotas_numeros?.includes(numeroBusca);
     return (
       p.nome_comprador.toLowerCase().includes(termo) ||
       p.cpf.includes(termo) ||
       p.whatsapp.includes(termo) ||
-      p.id.toLowerCase().includes(termo)
+      p.id.toLowerCase().includes(termo) ||
+      temCota
     );
   });
 
   const handleMarcarComoPago = async (pedidoId: string) => {
+    const ped = pedidos.find((p) => p.id === pedidoId);
     await atualizarStatusPedido(pedidoId, 'pago');
+    registrarLogAuditoria({
+      tipo: 'pagamento',
+      titulo: `Pedido #${pedidoId.slice(0, 8).toUpperCase()} Marcado como Pago`,
+      detalhes: `Comprador: ${ped?.nome_comprador || 'Apoiador'} • WhatsApp: ${ped?.whatsapp || 'N/A'} • Valor: ${ped?.valor_total ? formatarMoeda(ped.valor_total) : 'R$ 20,00'}`,
+      cotas: ped?.cotas_numeros,
+      pedidoId,
+      comprador: ped?.nome_comprador,
+      valor: ped?.valor_total,
+      origem: 'admin_painel',
+      status: 'sucesso',
+    });
     onRecarregarDados();
   };
 
   const handleCancelarPedido = async (pedidoId: string) => {
+    const ped = pedidos.find((p) => p.id === pedidoId);
     if (confirm('Deseja realmente cancelar este pedido e liberar as cotas reservadas?')) {
       await atualizarStatusPedido(pedidoId, 'cancelado');
+      registrarLogAuditoria({
+        tipo: 'cancelamento',
+        titulo: `Pedido #${pedidoId.slice(0, 8).toUpperCase()} Cancelado (Cotas Liberadas)`,
+        detalhes: `Reserva cancelada pelo Administrador. Cotas devolvidas para a grade pública: ${(ped?.cotas_numeros || []).map((n) => formatarNumeroCota(n)).join(', ')}`,
+        cotas: ped?.cotas_numeros,
+        pedidoId,
+        comprador: ped?.nome_comprador,
+        origem: 'admin_painel',
+        status: 'aviso',
+      });
       onRecarregarDados();
     }
   };
@@ -182,6 +236,18 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       });
 
       if (res.success) {
+        registrarLogAuditoria({
+          tipo: 'venda_manual',
+          titulo: `Venda Balcão: ${cotasSelecionadas.length} cota(s) para ${manualNome.trim()}`,
+          detalhes: `Forma de Pagamento: ${manualFormaPagamento.toUpperCase()} • Cotas: ${cotasSelecionadas.map((n) => formatarNumeroCota(n)).join(', ')}`,
+          cotas: cotasSelecionadas,
+          pedidoId: res.pedidoId,
+          comprador: manualNome.trim(),
+          valor: valorTotal,
+          origem: 'admin_painel',
+          status: 'sucesso',
+        });
+
         setManualSucesso({
           pedidoId: res.pedidoId,
           nome: manualNome.trim(),
@@ -283,6 +349,16 @@ ON CONFLICT (numero) DO NOTHING;`;
 
           <div className="flex items-center space-x-2">
             <button
+              onClick={handleSincronizarSupabase}
+              disabled={sincronizando}
+              className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white flex items-center space-x-1.5 transition cursor-pointer shadow-sm disabled:opacity-50"
+              title="Sincronizar em tempo real com o banco de dados Supabase"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${sincronizando ? 'animate-spin' : ''}`} />
+              <span>{sincronizando ? 'Sincronizando...' : 'Sincronizar Dados'}</span>
+            </button>
+
+            <button
               onClick={handleRestaurarBanco}
               className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center space-x-1.5 transition cursor-pointer"
               title="Restaura os dados de teste locais"
@@ -338,6 +414,17 @@ ON CONFLICT (numero) DO NOTHING;`;
             Pedidos Recebidos ({pedidos.length})
           </button>
           <button
+            onClick={() => setAbaAtiva('cotas_reservadas')}
+            className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+              abaAtiva === 'cotas_reservadas'
+                ? 'bg-amber-400 text-slate-950 font-black'
+                : 'text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>Cotas Reservadas ({cotasReservadas.length})</span>
+          </button>
+          <button
             onClick={() => {
               setAbaAtiva('venda_manual');
               setManualSucesso(null);
@@ -377,6 +464,17 @@ ON CONFLICT (numero) DO NOTHING;`;
             }`}
           >
             <span>InfinitePay &amp; Webhook</span>
+          </button>
+          <button
+            onClick={() => setAbaAtiva('logs_auditoria')}
+            className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+              abaAtiva === 'logs_auditoria'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Logs de Auditoria</span>
           </button>
           <button
             onClick={() => setAbaAtiva('sql')}
@@ -450,8 +548,20 @@ ON CONFLICT (numero) DO NOTHING;`;
                           </div>
 
                           {ped.cotas_numeros && ped.cotas_numeros.length > 0 && (
-                            <div className="text-[11px] font-mono text-slate-400">
-                              Cotas: {ped.cotas_numeros.map((n) => formatarNumeroCota(n)).join(', ')}
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                              <span className="text-[11px] text-slate-400">Cotas:</span>
+                              {ped.cotas_numeros.map((n) => (
+                                <span
+                                  key={n}
+                                  className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-bold border ${
+                                    isPago
+                                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600/40'
+                                      : 'bg-amber-950/80 text-amber-300 border-amber-600/40'
+                                  }`}
+                                >
+                                  {formatarNumeroCota(n)}
+                                </span>
+                              ))}
                             </div>
                           )}
                         </div>
@@ -479,6 +589,90 @@ ON CONFLICT (numero) DO NOTHING;`;
                               <span>Liberar</span>
                             </button>
                           )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {abaAtiva === 'cotas_reservadas' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-800/60 text-xs text-amber-200 space-y-1">
+                <div className="flex items-center space-x-2 text-white font-bold text-sm">
+                  <Clock className="w-4 h-4 text-amber-400" />
+                  <span>Gestão de Cotas Reservadas no Sistema</span>
+                </div>
+                <p className="text-slate-300">
+                  Cotas com reservas ativas aguardam pagamento por até 3 horas. Você pode confirmar o pagamento ou liberar a cota de volta para a grade imediatamente.
+                </p>
+              </div>
+
+              {cotasReservadas.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 bg-slate-950/40 rounded-2xl border border-slate-800">
+                  <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-80" />
+                  <p className="text-sm font-semibold text-white">Nenhuma cota reservada no momento</p>
+                  <p className="text-xs text-slate-400 mt-1">Todas as cotas estão livres ou já foram 100% pagas e confirmadas!</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {cotasReservadas.map((cota) => {
+                    const pedidoVinculado = pedidos.find((p) => p.id === cota.pedido_id);
+                    return (
+                      <div
+                        key={cota.numero}
+                        className="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xl font-mono font-black text-amber-300 bg-amber-400/20 px-3 py-1 rounded-xl border border-amber-400/40">
+                            #{formatarNumeroCota(cota.numero)}
+                          </span>
+                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-600/40">
+                            Reservada
+                          </span>
+                        </div>
+
+                        {pedidoVinculado ? (
+                          <div className="text-xs space-y-1 text-slate-300 border-t border-slate-800/80 pt-2">
+                            <div>
+                              <span className="text-slate-400 block text-[10px]">Comprador:</span>
+                              <strong className="text-white">{pedidoVinculado.nome_comprador}</strong>
+                            </div>
+                            <div className="flex items-center justify-between text-[11px] text-slate-400">
+                              <span>WhatsApp: {mascararWhatsApp(pedidoVinculado.whatsapp)}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-500 pt-2">
+                            Reserva sem pedido detalhado
+                          </div>
+                        )}
+
+                        <div className="flex items-center space-x-2 pt-1">
+                          {cota.pedido_id && (
+                            <button
+                              onClick={() => handleMarcarComoPago(cota.pedido_id!)}
+                              className="flex-1 py-1.5 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer flex items-center justify-center space-x-1"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Pago</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={async () => {
+                              if (confirm(`Deseja liberar a cota #${formatarNumeroCota(cota.numero)} agora?`)) {
+                                if (cota.pedido_id) {
+                                  await handleCancelarPedido(cota.pedido_id);
+                                }
+                              }
+                            }}
+                            className="flex-1 py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-300 border border-slate-700 text-xs font-semibold transition cursor-pointer flex items-center justify-center space-x-1"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <span>Liberar</span>
+                          </button>
                         </div>
                       </div>
                     );
@@ -1190,6 +1384,10 @@ ON CONFLICT (numero) DO NOTHING;`;
                 </pre>
               </div>
             </div>
+          )}
+
+          {abaAtiva === 'logs_auditoria' && (
+            <AuditLogsViewer onRefreshData={onRecarregarDados} />
           )}
         </div>
       </div>

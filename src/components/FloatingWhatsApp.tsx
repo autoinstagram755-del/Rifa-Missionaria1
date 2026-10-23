@@ -1,9 +1,27 @@
-import React, { useState } from 'react';
-import { X, Sparkles, MessageCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
 import { WHATSAPP_DUVIDAS, WHATSAPP_DUVIDAS_FORMATADO } from '../utils/rules.ts';
 
 export const FloatingWhatsApp: React.FC = () => {
-  const [mostrarBalão, setMostrarBalão] = useState(true);
+  const [montado, setMontado] = useState(false);
+  const [mostrarBalão, setMostrarBalão] = useState(false);
+
+  useEffect(() => {
+    // Animação suave de entrada (fade-in-up) para o botão ao montar
+    const timerMontagem = setTimeout(() => {
+      setMontado(true);
+    }, 100);
+
+    // O balão de ajuda surge suavemente apenas 2 segundos após a renderização da página
+    const timerBalao = setTimeout(() => {
+      setMostrarBalão(true);
+    }, 2000);
+
+    return () => {
+      clearTimeout(timerMontagem);
+      clearTimeout(timerBalao);
+    };
+  }, []);
 
   const mensagemPadrao = encodeURIComponent(
     'Olá! A paz do Senhor. Tenho uma dúvida sobre a Ação Solidária Missão & Cooperação.'
@@ -11,17 +29,21 @@ export const FloatingWhatsApp: React.FC = () => {
   const linkWhatsApp = `https://wa.me/${WHATSAPP_DUVIDAS}?text=${mensagemPadrao}`;
 
   return (
-    <div className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 flex flex-col items-end pointer-events-none">
-      {/* Balão de Dúvidas / Suporte (com botão de fechar apenas o balão) */}
+    <div
+      className={`fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 flex flex-col items-end pointer-events-none transition-all duration-700 ease-out transform ${
+        montado ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+      }`}
+    >
+      {/* Balão de Dúvidas / Suporte (surge suavemente 2 segundos após a renderização) */}
       {mostrarBalão && (
-        <div className="relative mb-3 max-w-[280px] sm:max-w-xs bg-slate-900/95 backdrop-blur-md text-white p-3.5 rounded-2xl shadow-2xl border border-emerald-500/30 animate-in fade-in slide-in-from-bottom-2 duration-300 pointer-events-auto">
+        <div className="relative mb-3 max-w-[280px] sm:max-w-xs bg-slate-900/95 backdrop-blur-md text-white p-3.5 rounded-2xl shadow-2xl border border-emerald-500/30 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out pointer-events-auto">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               setMostrarBalão(false);
             }}
-            className="absolute top-2 right-2 p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+            className="absolute top-2 right-2 p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
             title="Fechar aviso"
             aria-label="Fechar aviso"
           >

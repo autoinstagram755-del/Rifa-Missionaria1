@@ -298,6 +298,7 @@ export function gerarPixBacen(
 // WhatsApp oficial para suporte e dúvidas
 export const WHATSAPP_DUVIDAS = '5561991736136';
 export const WHATSAPP_DUVIDAS_FORMATADO = '(61) 99173-6136';
+export const WHATSAPP_SUPORTE_NUMERO = WHATSAPP_DUVIDAS;
 
 // Tempo máximo de reserva antes da liberação automática: 3 horas
 export const TEMPO_EXPIRACAO_RESERVA_HORAS = 3;

@@ -97,6 +97,7 @@ export async function obterCotas(): Promise<Cota[]> {
         .order('numero', { ascending: true });
 
       if (!error && data && data.length > 0) {
+        localStorage.setItem(LOCAL_STORAGE_COTAS_KEY, JSON.stringify(data));
         return data as Cota[];
       }
       console.warn('Supabase não retornou cotas, utilizando estado local.', error);
@@ -128,7 +129,7 @@ export function salvarCotasLocais(cotas: Cota[]): void {
 }
 
 /**
- * Carrega pedidos
+ * Carrega pedidos com cotas vinculadas diretamente do Supabase
  */
 export async function obterPedidos(): Promise<Pedido[]> {
   try {
@@ -139,11 +140,19 @@ export async function obterPedidos(): Promise<Pedido[]> {
     try {
       const { data, error } = await supabase
         .from('pedidos')
-        .select('*')
+        .select('*, cotas(numero, status)')
         .order('created_at', { ascending: false });
 
       if (!error && data) {
-        return data as Pedido[];
+        const formatados = data.map((p: any) => ({
+          ...p,
+          cotas_numeros:
+            p.cotas && Array.isArray(p.cotas) && p.cotas.length > 0
+              ? p.cotas.map((c: any) => c.numero).sort((a: number, b: number) => a - b)
+              : p.cotas_numeros || [],
+        })) as Pedido[];
+        localStorage.setItem(LOCAL_STORAGE_PEDIDOS_KEY, JSON.stringify(formatados));
+        return formatados;
       }
     } catch (err) {
       console.warn('Erro ao obter pedidos do Supabase', err);
@@ -191,22 +200,24 @@ export async function atualizarStatusPedido(
   pedidoId: string,
   novoStatus: 'pago' | 'cancelado' | 'pendente'
 ): Promise<boolean> {
-  if (isSupabaseConfigured) {
+  const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(pedidoId);
+
+  if (isSupabaseConfigured && isUuid) {
     try {
       await supabase
         .from('pedidos')
-        .update({ status_pagamento: novoStatus, updated_at: new Date().toISOString() })
+        .update({ status_pagamento: novoStatus })
         .eq('id', pedidoId);
 
       if (novoStatus === 'pago') {
         await supabase
           .from('cotas')
-          .update({ status: 'pago', updated_at: new Date().toISOString() })
+          .update({ status: 'pago' })
           .eq('pedido_id', pedidoId);
       } else if (novoStatus === 'cancelado') {
         await supabase
           .from('cotas')
-          .update({ status: 'disponivel', pedido_id: null, updated_at: new Date().toISOString() })
+          .update({ status: 'disponivel', pedido_id: null })
           .eq('pedido_id', pedidoId);
       }
     } catch (e) {
@@ -276,13 +287,13 @@ export async function verificarELiberarCotasExpiradas(): Promise<{ pedidosCancel
         // Atualiza pedidos expirados para 'cancelado'
         await supabase
           .from('pedidos')
-          .update({ status_pagamento: 'cancelado', updated_at: new Date().toISOString() })
+          .update({ status_pagamento: 'cancelado' })
           .in('id', ids);
 
         // Libera as cotas correspondentes
         const { data: cotasLiberadasDb } = await supabase
           .from('cotas')
-          .update({ status: 'disponivel', pedido_id: null, updated_at: new Date().toISOString() })
+          .update({ status: 'disponivel', pedido_id: null })
           .in('pedido_id', ids)
           .select('numero');
 
@@ -321,7 +332,6 @@ export async function verificarELiberarCotasExpiradas(): Promise<{ pedidosCancel
           if (c.pedido_id && idsCancelados.has(c.pedido_id) && c.status === 'reservado') {
             c.status = 'disponivel';
             c.pedido_id = null;
-            c.updated_at = new Date().toISOString();
             cotasLiberadas++;
           }
         }
@@ -355,7 +365,7 @@ export async function criarPedidoManualAdmin(params: {
   cotasNumeros: number[];
   formaPagamento: 'dinheiro' | 'pix_direto' | 'maquininha';
 }): Promise<{ success: boolean; pedidoId: string; error?: string }> {
-  const pedidoId = `adm-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const pedidoId = crypto.randomUUID();
   const qtd = params.cotasNumeros.length;
   const valorTotal = calcularValorTotal(qtd);
   const now = new Date().toISOString();
@@ -371,7 +381,6 @@ export async function criarPedidoManualAdmin(params: {
     transaction_id_infinitepay: `MANUAL_${params.formaPagamento.toUpperCase()}`,
     cotas_numeros: params.cotasNumeros,
     created_at: now,
-    updated_at: now,
   };
 
   if (isSupabaseConfigured) {
@@ -386,7 +395,6 @@ export async function criarPedidoManualAdmin(params: {
         status_pagamento: 'pago',
         transaction_id_infinitepay: novoPedido.transaction_id_infinitepay,
         created_at: now,
-        updated_at: now,
       });
 
       if (!errPed) {
@@ -395,9 +403,10 @@ export async function criarPedidoManualAdmin(params: {
           .update({
             status: 'pago',
             pedido_id: pedidoId,
-            updated_at: now,
           })
           .in('numero', params.cotasNumeros);
+      } else {
+        console.error('Erro ao inserir pedido manual no Supabase:', errPed);
       }
     } catch (e) {
       console.warn('Erro ao salvar no Supabase:', e);

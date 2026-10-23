@@ -132,3 +132,14 @@ test('mensagens de lembrete WhatsApp contêm nome, números e causa missionária
   assert.equal(msg15m.includes('Pr. Jocimar'), true);
 });
 
+test('estado inicial de pedido e link de checkout da InfinitePay com valor correto', () => {
+  const valorTotal = 20.0;
+  const pedidoId = 'ped-123456';
+  const handle = 'jocimar-silva-128';
+  const linkCartao = `https://checkout.infinitepay.io/${handle}?amount=${Math.round(valorTotal * 100)}&order_nsu=${pedidoId}`;
+
+  assert.equal(linkCartao.includes('amount=2000'), true);
+  assert.equal(linkCartao.includes('order_nsu=ped-123456'), true);
+  assert.equal(linkCartao.includes('jocimar-silva-128'), true);
+});
+

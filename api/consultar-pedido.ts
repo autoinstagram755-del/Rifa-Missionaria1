@@ -1,16 +1,17 @@
+import 'dotenv/config';
 import type { Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const supabaseServiceKey =
-  process.env.SUPABASE_SECRET_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_PUBLISHABLE_KEY ||
-  process.env.VITE_SUPABASE_ANON_KEY ||
-  '';
-const infinitePayHandle = process.env.INFINITEPAY_HANDLE || 'jocimar-silva-128';
-
 export default async function handler(req: Request, res: Response) {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const supabaseServiceKey =
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    '';
+  const infinitePayHandle = process.env.INFINITEPAY_HANDLE || 'jocimar-silva-128';
+
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -32,14 +33,20 @@ export default async function handler(req: Request, res: Response) {
   let dadosPedido: any = null;
 
   // 1. Consulta no Supabase
+  const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
+
   if (supabaseUrl && supabaseServiceKey && !supabaseUrl.includes('your-project')) {
     try {
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
-      const { data: pedido, error } = await supabase
-        .from('pedidos')
-        .select('*, cotas(numero, status)')
-        .eq('id', id)
-        .single();
+      let query = supabase.from('pedidos').select('*, cotas(numero, status)');
+
+      if (isUuid) {
+        query = query.eq('id', id);
+      } else {
+        query = query.eq('transaction_id_infinitepay', id);
+      }
+
+      const { data: pedido, error } = await query.maybeSingle();
 
       if (!error && pedido) {
         dadosPedido = pedido;
@@ -73,14 +80,16 @@ export default async function handler(req: Request, res: Response) {
           // Atualiza no Supabase imediatamente
           if (supabaseUrl && supabaseServiceKey && !supabaseUrl.includes('your-project')) {
             const supabase = createClient(supabaseUrl, supabaseServiceKey);
-            await supabase
-              .from('pedidos')
-              .update({ status_pagamento: 'pago', updated_at: new Date().toISOString() })
-              .eq('id', id);
-            await supabase
-              .from('cotas')
-              .update({ status: 'pago', updated_at: new Date().toISOString() })
-              .eq('pedido_id', id);
+            if (isUuid) {
+              await supabase
+                .from('pedidos')
+                .update({ status_pagamento: 'pago' })
+                .eq('id', id);
+              await supabase
+                .from('cotas')
+                .update({ status: 'pago' })
+                .eq('pedido_id', id);
+            }
           }
         }
       }

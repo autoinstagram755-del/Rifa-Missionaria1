@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, Search, CheckCircle, Clock, ShieldCheck, AlertCircle } from 'lucide-react';
+import { X, Search, CheckCircle, Clock, ShieldCheck, AlertCircle, Copy, Check, MessageSquare } from 'lucide-react';
 import { Pedido, Cota } from '../lib/supabase.ts';
-import { formatarMoeda, formatarNumeroCota, mascararCPF, mascararWhatsApp, TEMPO_EXPIRACAO_RESERVA_MS } from '../utils/rules.ts';
+import { formatarMoeda, formatarNumeroCota, mascararCPF, mascararWhatsApp, TEMPO_EXPIRACAO_RESERVA_MS, WHATSAPP_SUPORTE_NUMERO } from '../utils/rules.ts';
 
 interface CheckOrderModalProps {
   isOpen: boolean;
@@ -18,6 +18,7 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
 }) => {
   const [documentoOuId, setDocumentoOuId] = useState('');
   const [consultado, setConsultado] = useState(false);
+  const [copiouPedidoId, setCopiouPedidoId] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -27,15 +28,32 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
     if (!termoLimpo && !documentoOuId.trim()) return false;
     const cpfPedidoLimpo = p.cpf.replace(/\D/g, '');
     const whatsPedidoLimpo = p.whatsapp.replace(/\D/g, '');
+    const numeroCota = parseInt(termoLimpo, 10);
+    const temCota = !isNaN(numeroCota) && p.cotas_numeros?.includes(numeroCota);
+    const nomeBate = p.nome_comprador.toLowerCase().includes(documentoOuId.trim().toLowerCase());
+
     return (
       (termoLimpo && (cpfPedidoLimpo.includes(termoLimpo) || whatsPedidoLimpo.includes(termoLimpo))) ||
-      p.id.toLowerCase().includes(documentoOuId.trim().toLowerCase())
+      p.id.toLowerCase().includes(documentoOuId.trim().toLowerCase()) ||
+      temCota ||
+      (documentoOuId.trim().length >= 3 && nomeBate)
     );
   });
 
   const handleBuscar = (e: React.FormEvent) => {
     e.preventDefault();
     setConsultado(true);
+  };
+
+  const copiarNumerosCotas = async (pedidoId: string, numeros: number[]) => {
+    try {
+      const texto = `Minhas Cotas da Ação Solidária: ${numeros.map((n) => formatarNumeroCota(n)).join(', ')}`;
+      await navigator.clipboard.writeText(texto);
+      setCopiouPedidoId(pedidoId);
+      setTimeout(() => setCopiouPedidoId(null), 3000);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   return (
@@ -55,7 +73,7 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
           </div>
           <h3 className="text-2xl font-extrabold text-white">Consultar Participação</h3>
           <p className="text-xs sm:text-sm text-slate-300">
-            Digite seu CPF ou WhatsApp para ver seus números e o status do pagamento.
+            Digite seu CPF, WhatsApp ou número de cota para consultar o comprovante oficial.
           </p>
         </div>
 
@@ -68,7 +86,7 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
               setDocumentoOuId(e.target.value);
               setConsultado(false);
             }}
-            placeholder="Digite seu CPF ou WhatsApp..."
+            placeholder="Digite CPF, WhatsApp ou nº da cota..."
             className="flex-1 px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
           />
           <button
@@ -80,12 +98,25 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
         </form>
 
         {consultado && (
-          <div className="mt-6 space-y-4">
+          <div className="mt-6 space-y-4 max-h-[60vh] overflow-y-auto pr-1">
             {pedidosEncontrados.length === 0 ? (
-              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-400">
-                <AlertCircle className="w-8 h-8 text-amber-400 mx-auto mb-2" />
-                <p>Nenhuma cota encontrada para este documento.</p>
-                <p className="mt-1">Verifique se digitou o CPF ou telefone exatamente como no cadastro.</p>
+              <div className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-400 space-y-2">
+                <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
+                <p className="font-semibold text-slate-200 text-sm">Nenhuma cota encontrada</p>
+                <p>Verifique se os dígitos do CPF ou telefone coincidem com o cadastro realizado.</p>
+                <div className="pt-2">
+                  <a
+                    href={`https://wa.me/${WHATSAPP_SUPORTE_NUMERO}?text=${encodeURIComponent(
+                      `Olá! Gostaria de confirmar minhas cotas na Ação Solidária. Meu documento/nome é: ${documentoOuId}`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center space-x-1.5 text-xs text-emerald-400 hover:text-emerald-300 underline font-semibold"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Falar no WhatsApp com o Suporte</span>
+                  </a>
+                </div>
               </div>
             ) : (
               pedidosEncontrados.map((ped) => {
@@ -100,18 +131,23 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
                 return (
                   <div
                     key={ped.id}
-                    className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3"
+                    className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3.5 shadow-md"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-white text-sm">{ped.nome_comprador}</span>
+                      <div>
+                        <span className="font-bold text-white text-base block">{ped.nome_comprador}</span>
+                        <span className="text-[11px] text-slate-400">
+                          WhatsApp: {mascararWhatsApp(ped.whatsapp)}
+                        </span>
+                      </div>
                       <span
-                        className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ${
+                        className={`px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
                           isPago
                             ? 'bg-emerald-950 text-emerald-300 border border-emerald-600/50'
                             : 'bg-amber-950 text-amber-300 border border-amber-600/50'
                         }`}
                       >
-                        {ped.status_pagamento}
+                        {isPago ? '100% Confirmado' : ped.status_pagamento}
                       </span>
                     </div>
 
@@ -124,40 +160,66 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
 
                       if (restanteMs <= 0) {
                         return (
-                          <div className="p-2 rounded-xl bg-rose-950/50 border border-rose-800/60 text-rose-300 text-xs flex items-center space-x-2">
+                          <div className="p-2.5 rounded-xl bg-rose-950/50 border border-rose-800/60 text-rose-300 text-xs flex items-center space-x-2">
                             <Clock className="w-3.5 h-3.5 shrink-0" />
-                            <span>Prazo de 3h expirado. Cotas liberadas na grade.</span>
+                            <span>Prazo de 3h expirado. Cotas devolvidas à grade livre.</span>
                           </div>
                         );
                       }
 
                       return (
-                        <div className="p-2 rounded-xl bg-amber-950/40 border border-amber-600/30 text-amber-300 text-xs flex items-center justify-between">
+                        <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-600/30 text-amber-300 text-xs flex items-center justify-between">
                           <span className="flex items-center space-x-1.5">
                             <Clock className="w-3.5 h-3.5 shrink-0 animate-pulse" />
-                            <span>Tempo de reserva (3h):</span>
+                            <span>Tempo restante da reserva (3h):</span>
                           </span>
                           <span className="font-bold font-mono">
-                            {restHoras > 0 ? `${restHoras}h ${minFinais}m restantes` : `${minFinais}m restantes`}
+                            {restHoras > 0 ? `${restHoras}h ${minFinais}m` : `${minFinais}m`}
                           </span>
                         </div>
                       );
                     })()}
 
-                    <div className="text-xs text-slate-400 flex justify-between">
-                      <span>Valor: {formatarMoeda(ped.valor_total)}</span>
-                      <span>Total: {ped.quantidade_cotas} cotas</span>
+                    <div className="text-xs text-slate-400 flex items-center justify-between border-t border-b border-slate-900 py-2">
+                      <span>Valor: <strong className="text-white">{formatarMoeda(ped.valor_total)}</strong></span>
+                      <span>Total: <strong className="text-white">{ped.quantidade_cotas} {ped.quantidade_cotas === 1 ? 'cota' : 'cotas'}</strong></span>
                     </div>
 
                     <div>
-                      <span className="text-xs text-amber-300 font-bold block mb-1">
-                        Seus Números no Sorteio:
-                      </span>
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs text-amber-300 font-bold">
+                          Seus Números no Sorteio:
+                        </span>
+                        {numeros.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => copiarNumerosCotas(ped.id, numeros)}
+                            className="text-[11px] text-slate-300 hover:text-white flex items-center space-x-1 p-1 rounded hover:bg-slate-800 transition cursor-pointer"
+                          >
+                            {copiouPedidoId === ped.id ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                <span className="text-emerald-400 font-semibold">Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                <span>Copiar Números</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 bg-slate-900/60 rounded-xl border border-slate-800">
                         {numeros.map((n) => (
                           <span
                             key={n}
-                            className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-amber-300 font-mono text-xs font-bold"
+                            className={`px-2.5 py-1 rounded-lg font-mono text-xs font-bold border ${
+                              isPago
+                                ? 'bg-amber-400/20 text-amber-300 border-amber-400/40'
+                                : 'bg-slate-800 text-slate-300 border-slate-700'
+                            }`}
                           >
                             {formatarNumeroCota(n)}
                           </span>

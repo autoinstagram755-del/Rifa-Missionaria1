@@ -104,17 +104,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         throw new Error(data.error || 'Erro ao processar reserva.');
       }
 
-      onSuccessCheckout(data);
+      onSuccessCheckout({
+        ...data,
+        metodo: metodoPagamento,
+      });
     } catch (err: any) {
       console.warn('Erro ao chamar /api/criar-pagamento, usando fallback local com Pix Oficial:', err);
       // Fallback com Pix Oficial Padrão Banco Central
-      const pedidoMockId = `ped-${Date.now()}`;
+      const pedidoMockId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : '00000000-0000-4000-8000-000000000000';
       const pixOficial = gerarPixBacen(
         CHAVE_PIX_OFICIAL,
         NOME_TITULAR_PIX,
         CIDADE_PIX,
         valorTotal,
-        pedidoMockId.slice(-8)
+        pedidoMockId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 25)
       );
       
       onSuccessCheckout({
@@ -127,6 +130,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         quantidade_cotas: qtdCotas,
         cotas_numeros: cotasEscolhidas.length > 0 ? cotasEscolhidas : Array.from({ length: qtdCotas }, (_, i) => i + 101),
         status: 'pendente',
+        metodo: metodoPagamento,
         pix_copia_cola: pixOficial,
         pix_qr_code_url: '',
         chave_pix: CHAVE_PIX_OFICIAL,
@@ -280,7 +284,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               {carregando ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Reservando Cotas &amp; Gerando Pix...</span>
+                  <span>
+                    {metodoPagamento === 'cartao'
+                      ? 'Reservando Cotas & Preparando Cartão...'
+                      : 'Reservando Cotas & Gerando Pix...'}
+                  </span>
                 </>
               ) : metodoPagamento === 'pix' ? (
                 <>
@@ -290,7 +298,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               ) : (
                 <>
                   <CreditCard className="w-5 h-5" />
-                  <span>Pagar no Cartão de Crédito</span>
+                  <span>Pagar no Cartão de Crédito (em até 12x)</span>
                 </>
               )}
             </button>
