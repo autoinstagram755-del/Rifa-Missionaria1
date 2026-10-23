@@ -103,9 +103,14 @@ export default function App() {
         .catch((e) => console.warn('Erro ao carregar pedido do redirect:', e));
     }
 
-    // Acesso discreto de emergência para o gestor via parâmetro na URL (?admin=missao2026 ou ?admin=true)
+    // Acesso para o gestor via parâmetro (?admin=true), rota (/admin) ou hash (#admin)
     const adminQuery = urlParams.get('admin');
-    if (adminQuery === 'missao2026' || adminQuery === 'true') {
+    if (
+      adminQuery === 'missao2026' ||
+      adminQuery === 'true' ||
+      window.location.pathname.includes('/admin') ||
+      window.location.hash.includes('admin')
+    ) {
       setAdminModalOpen(true);
     }
 
@@ -254,6 +259,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-amber-400 selection:text-slate-950">
       {/* Header com Navegação */}
       <Header
+        onOpenAdmin={() => setAdminModalOpen(true)}
         onOpenCheckOrder={() => setCheckOrderModalOpen(true)}
         onOpenStory={() => scrollTo('historia-missao')}
         onOpenCombos={() => scrollTo('combos-cotas')}
@@ -290,6 +296,7 @@ export default function App() {
       <Footer
         onOpenStory={() => scrollTo('historia-missao')}
         onOpenCombos={() => scrollTo('combos-cotas')}
+        onOpenAdmin={() => setAdminModalOpen(true)}
       />
 
       {/* Modal de Formulário de Checkout */}

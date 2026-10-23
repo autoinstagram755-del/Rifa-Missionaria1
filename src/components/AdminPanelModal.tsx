@@ -63,7 +63,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   cotas,
   onRecarregarDados,
 }) => {
-  const [abaAtiva, setAbaAtiva] = useState<'pedidos' | 'cotas_reservadas' | 'venda_manual' | 'lembretes_whatsapp' | 'infinitepay' | 'logs_auditoria' | 'sql'>('pedidos');
+  const [abaAtiva, setAbaAtiva] = useState<'venda_manual' | 'pedidos' | 'cotas_reservadas' | 'lembretes_whatsapp' | 'infinitepay' | 'logs_auditoria' | 'sql'>('venda_manual');
   const [busca, setBusca] = useState('');
   const [copiouSql, setCopiouSql] = useState(false);
   const [testandoWebhook, setTestandoWebhook] = useState(false);
@@ -412,6 +412,21 @@ ON CONFLICT (numero) DO NOTHING;`;
         {/* Abas */}
         <div className="mt-4 flex flex-wrap items-center gap-2 border-b border-slate-800 pb-2">
           <button
+            onClick={() => {
+              setAbaAtiva('venda_manual');
+              setManualSucesso(null);
+              setManualErro(null);
+            }}
+            className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+              abaAtiva === 'venda_manual'
+                ? 'bg-amber-400 text-slate-950 font-black shadow-md ring-2 ring-amber-400/50'
+                : 'text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/40'
+            }`}
+          >
+            <Banknote className="w-4 h-4 text-amber-950" />
+            <span>Venda Balcão (Combos &amp; 500 Cotas)</span>
+          </button>
+          <button
             onClick={() => setAbaAtiva('pedidos')}
             className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
               abaAtiva === 'pedidos'
@@ -431,21 +446,6 @@ ON CONFLICT (numero) DO NOTHING;`;
           >
             <Clock className="w-3.5 h-3.5" />
             <span>Cotas Reservadas ({cotasReservadas.length})</span>
-          </button>
-          <button
-            onClick={() => {
-              setAbaAtiva('venda_manual');
-              setManualSucesso(null);
-              setManualErro(null);
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer flex items-center space-x-1.5 ${
-              abaAtiva === 'venda_manual'
-                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
-                : 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30'
-            }`}
-          >
-            <Banknote className="w-3.5 h-3.5" />
-            <span>Lançar Venda (Dinheiro / Balcão)</span>
           </button>
           <button
             onClick={() => setAbaAtiva('lembretes_whatsapp')}
