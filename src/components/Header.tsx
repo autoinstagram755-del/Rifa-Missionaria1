@@ -3,7 +3,6 @@ import { HeartHandshake, ShieldCheck, Database, Search, LayoutDashboard } from '
 import { isSupabaseConfigured } from '../lib/supabase.ts';
 
 interface HeaderProps {
-  onOpenAdmin?: () => void;
   onOpenCheckOrder: () => void;
   onOpenStory: () => void;
   onOpenCombos: () => void;
@@ -11,7 +10,6 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  onOpenAdmin,
   onOpenCheckOrder,
   onOpenStory,
   onOpenCombos,
@@ -63,20 +61,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </nav>
 
-          {/* Ações Rápidas */}
+          {/* Ações Rápidas do Comprador */}
           <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* Botão Painel Admin */}
-            {onOpenAdmin && (
-              <button
-                onClick={onOpenAdmin}
-                className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs sm:text-sm font-bold text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/40 rounded-lg transition cursor-pointer shadow-sm"
-                title="Abrir Painel Administrativo de Gestão e Venda Balcão"
-              >
-                <LayoutDashboard className="w-4 h-4 text-amber-400" />
-                <span>Painel Admin</span>
-              </button>
-            )}
-
             {/* Botão Consultar Meus Números */}
             <button
               onClick={onOpenCheckOrder}

@@ -4,13 +4,11 @@ import { HeartHandshake, ShieldCheck, Heart, MapPin, Phone, HelpCircle } from 'l
 interface FooterProps {
   onOpenStory: () => void;
   onOpenCombos: () => void;
-  onOpenAdmin?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
   onOpenStory,
   onOpenCombos,
-  onOpenAdmin,
 }) => {
   return (
     <footer className="bg-slate-950 text-slate-400 border-t border-slate-800 text-xs py-12">
@@ -70,16 +68,6 @@ export const Footer: React.FC<FooterProps> = ({
                   Dúvidas no WhatsApp
                 </a>
               </li>
-              {onOpenAdmin && (
-                <li>
-                  <button
-                    onClick={onOpenAdmin}
-                    className="hover:text-amber-400 transition cursor-pointer text-amber-400/90 font-semibold flex items-center space-x-1"
-                  >
-                    <span>🔐 Painel do Administrador</span>
-                  </button>
-                </li>
-              )}
             </ul>
           </div>
 

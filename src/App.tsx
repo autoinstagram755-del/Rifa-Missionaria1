@@ -6,7 +6,6 @@ import { ComboSection } from './components/ComboSection.tsx';
 import { QuotaGrid } from './components/QuotaGrid.tsx';
 import { CheckoutModal } from './components/CheckoutModal.tsx';
 import { PixConfirmationModal } from './components/PixConfirmationModal.tsx';
-import { AdminPanelModal } from './components/AdminPanelModal.tsx';
 import { CheckOrderModal } from './components/CheckOrderModal.tsx';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp.tsx';
 import { Footer } from './components/Footer.tsx';
@@ -35,7 +34,6 @@ export default function App() {
   // Modais
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [pixModalOpen, setPixModalOpen] = useState(false);
-  const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [checkOrderModalOpen, setCheckOrderModalOpen] = useState(false);
 
   // Dados do pedido atual em checkout
@@ -101,17 +99,6 @@ export default function App() {
           }
         })
         .catch((e) => console.warn('Erro ao carregar pedido do redirect:', e));
-    }
-
-    // Acesso para o gestor via parâmetro (?admin=true), rota (/admin) ou hash (#admin)
-    const adminQuery = urlParams.get('admin');
-    if (
-      adminQuery === 'missao2026' ||
-      adminQuery === 'true' ||
-      window.location.pathname.includes('/admin') ||
-      window.location.hash.includes('admin')
-    ) {
-      setAdminModalOpen(true);
     }
 
     // Intervalo de verificação periódica a cada 60s para liberar reservas com mais de 3h
@@ -259,7 +246,6 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-amber-400 selection:text-slate-950">
       {/* Header com Navegação */}
       <Header
-        onOpenAdmin={() => setAdminModalOpen(true)}
         onOpenCheckOrder={() => setCheckOrderModalOpen(true)}
         onOpenStory={() => scrollTo('historia-missao')}
         onOpenCombos={() => scrollTo('combos-cotas')}
@@ -296,7 +282,6 @@ export default function App() {
       <Footer
         onOpenStory={() => scrollTo('historia-missao')}
         onOpenCombos={() => scrollTo('combos-cotas')}
-        onOpenAdmin={() => setAdminModalOpen(true)}
       />
 
       {/* Modal de Formulário de Checkout */}
@@ -318,15 +303,6 @@ export default function App() {
         }}
         dadosPedido={dadosPedidoAtual}
         onPagamentoConfirmado={handlePagamentoConfirmado}
-      />
-
-      {/* Painel Administrativo de Gestão de Cotas & Script SQL */}
-      <AdminPanelModal
-        isOpen={adminModalOpen}
-        onClose={() => setAdminModalOpen(false)}
-        pedidos={pedidos}
-        cotas={cotas}
-        onRecarregarDados={carregarDados}
       />
 
       {/* Modal de Consulta de Pedidos e Cotas por CPF */}
