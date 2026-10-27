@@ -148,9 +148,17 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
           />
           <button
             type="submit"
-            className="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm rounded-xl transition cursor-pointer shrink-0"
+            disabled={buscandoDb}
+            className="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm rounded-xl transition cursor-pointer shrink-0 flex items-center space-x-1.5"
           >
-            Buscar
+            {buscandoDb ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                <span>Buscando...</span>
+              </>
+            ) : (
+              <span>Buscar</span>
+            )}
           </button>
         </form>
 
@@ -179,11 +187,12 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
               pedidosEncontrados.map((ped) => {
                 const isPago = ped.status_pagamento === 'pago';
 
-                // Localiza números das cotas associadas
+                // Localiza números das cotas associadas com prioridade para cotas vinculadas
                 const cotasDoPedido = cotas.filter((c) => c.pedido_id === ped.id);
-                const numeros = cotasDoPedido.map((c) => c.numero).length > 0
-                  ? cotasDoPedido.map((c) => c.numero)
-                  : ped.cotas_numeros || [];
+                const numeros =
+                  ped.cotas_numeros && ped.cotas_numeros.length > 0
+                    ? ped.cotas_numeros
+                    : cotasDoPedido.map((c) => c.numero);
 
                 return (
                   <div
