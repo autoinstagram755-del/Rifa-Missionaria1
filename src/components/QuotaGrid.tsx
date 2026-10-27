@@ -316,8 +316,8 @@ export const QuotaGrid: React.FC<QuotaGridProps> = ({
                 <span className="w-3.5 h-3.5 rounded bg-amber-950 border border-amber-600/60 inline-block" />
                 <span>Reservado</span>
               </span>
-              <span className="flex items-center space-x-1.5 text-slate-400">
-                <span className="w-3.5 h-3.5 rounded bg-slate-950 border border-slate-800 inline-block" />
+              <span className="flex items-center space-x-1.5 text-rose-400 font-semibold">
+                <span className="w-3.5 h-3.5 rounded bg-rose-950 border border-rose-600/70 inline-block" />
                 <span>Pago &amp; Confirmado</span>
               </span>
             </div>
@@ -427,10 +427,10 @@ export const QuotaGrid: React.FC<QuotaGridProps> = ({
                     'bg-amber-400 text-slate-950 font-black border-amber-300 shadow-lg shadow-amber-400/40 ring-2 ring-amber-400 scale-[1.03] z-10';
                 } else if (isPago) {
                   classeBotao =
-                    'bg-slate-950 text-slate-500 border-slate-900 cursor-not-allowed opacity-75';
+                    'bg-rose-950/70 text-rose-300 border-rose-800/80 cursor-not-allowed opacity-90 shadow-sm';
                 } else if (isReservado) {
                   classeBotao =
-                    'bg-amber-950/60 text-amber-300/80 border-amber-700/50 cursor-not-allowed opacity-85';
+                    'bg-amber-950/70 text-amber-300 border-amber-700/70 cursor-not-allowed opacity-90';
                 }
 
                 return (
@@ -452,12 +452,12 @@ export const QuotaGrid: React.FC<QuotaGridProps> = ({
                   >
                     <span>{formatarNumeroCota(cota.numero)}</span>
                     {isPago && (
-                      <span className="text-[9px] uppercase tracking-tighter opacity-80 font-sans">
+                      <span className="text-[9px] uppercase tracking-tighter text-rose-400 font-sans font-bold">
                         Paga
                       </span>
                     )}
                     {isReservado && !isSelected && (
-                      <span className="text-[9px] uppercase tracking-tighter text-amber-400/90 font-sans">
+                      <span className="text-[9px] uppercase tracking-tighter text-amber-400/90 font-sans font-bold">
                         Reserva
                       </span>
                     )}
