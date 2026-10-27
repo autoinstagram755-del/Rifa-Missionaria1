@@ -2,14 +2,17 @@ import 'dotenv/config';
 import type { Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 
+const DEFAULT_SUPABASE_URL = 'https://tnnrppcrcakipkmfedmm.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_57UbZEeDu8lqMnhj90eghQ_TL7W0Yoo';
+
 export default async function handler(req: Request, res: Response) {
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
   const supabaseServiceKey =
     process.env.SUPABASE_SECRET_KEY ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
     process.env.VITE_SUPABASE_ANON_KEY ||
-    '';
+    DEFAULT_SUPABASE_KEY;
 
   // Apenas requisições POST são aceitas pelo webhook
   if (req.method !== 'POST') {

@@ -25,8 +25,11 @@ export interface Pedido {
   cotas_numeros?: number[];
 }
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const DEFAULT_SUPABASE_URL = 'https://tnnrppcrcakipkmfedmm.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_57UbZEeDu8lqMnhj90eghQ_TL7W0Yoo';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
@@ -35,11 +38,8 @@ export const isSupabaseConfigured = Boolean(
     !supabaseAnonKey.includes('your-anon-key')
 );
 
-// Cria o cliente Supabase oficial
-export const supabase = createClient(
-  supabaseUrl || 'https://xyzcompany.supabase.co',
-  supabaseAnonKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder'
-);
+// Cria o cliente Supabase oficial conectado à nuvem
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Chaves do localStorage para modo de demonstração / fallback offline
 const LOCAL_STORAGE_COTAS_KEY = 'acao_solidaria_cotas_v1';

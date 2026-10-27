@@ -5,14 +5,17 @@ import { createClient } from '@supabase/supabase-js';
 // 3 horas = 10.800.000 ms
 const TEMPO_EXPIRACAO_MS = 3 * 60 * 60 * 1000;
 
+const DEFAULT_SUPABASE_URL = 'https://tnnrppcrcakipkmfedmm.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_57UbZEeDu8lqMnhj90eghQ_TL7W0Yoo';
+
 export async function executarLiberacaoExpiradas() {
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
   const supabaseServiceKey =
     process.env.SUPABASE_SECRET_KEY ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
     process.env.VITE_SUPABASE_ANON_KEY ||
-    '';
+    DEFAULT_SUPABASE_KEY;
 
   const agora = Date.now();
   const cutoffDate = new Date(agora - TEMPO_EXPIRACAO_MS).toISOString();

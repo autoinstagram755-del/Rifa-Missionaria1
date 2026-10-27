@@ -12,15 +12,18 @@ import {
   CIDADE_PIX,
 } from '../src/utils/rules.ts';
 
+const DEFAULT_SUPABASE_URL = 'https://tnnrppcrcakipkmfedmm.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_57UbZEeDu8lqMnhj90eghQ_TL7W0Yoo';
+
 export default async function handler(req: Request, res: Response) {
-  // Chaves do ambiente
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  // Chaves do ambiente com fallback para o Supabase oficial
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
   const supabaseServiceKey =
     process.env.SUPABASE_SECRET_KEY ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
     process.env.VITE_SUPABASE_ANON_KEY ||
-    '';
+    DEFAULT_SUPABASE_KEY;
   const infinitePayApiKey = process.env.INFINITEPAY_API_KEY || '';
   const infinitePayHandle = process.env.INFINITEPAY_HANDLE || 'jocimar-silva-128';
   const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -136,6 +139,7 @@ export default async function handler(req: Request, res: Response) {
 
       if (errPedido) {
         console.error('Erro ao criar pedido no Supabase:', errPedido);
+        throw new Error('Falha ao registrar pedido no banco de dados: ' + errPedido.message);
       }
 
       // Atualiza status das cotas para 'reservado'
@@ -149,6 +153,7 @@ export default async function handler(req: Request, res: Response) {
 
       if (errCotas) {
         console.error('Erro ao reservar cotas:', errCotas);
+        throw new Error('Falha ao reservar cotas no banco de dados: ' + errCotas.message);
       }
     } else {
       // Modo local / demonstração
