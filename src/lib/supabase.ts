@@ -28,8 +28,10 @@ export interface Pedido {
 const DEFAULT_SUPABASE_URL = 'https://tnnrppcrcakipkmfedmm.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_57UbZEeDu8lqMnhj90eghQ_TL7W0Yoo';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+const envViteUrl = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_SUPABASE_URL : '';
+const envViteKey = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_SUPABASE_ANON_KEY : '';
+const supabaseUrl = envViteUrl || DEFAULT_SUPABASE_URL;
+const supabaseAnonKey = envViteKey || DEFAULT_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
@@ -44,6 +46,23 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // Chaves do localStorage para modo de demonstração / fallback offline
 const LOCAL_STORAGE_COTAS_KEY = 'acao_solidaria_cotas_v1';
 const LOCAL_STORAGE_PEDIDOS_KEY = 'acao_solidaria_pedidos_v1';
+
+function safeGetStorage(key: string): string | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return localStorage.getItem(key);
+    }
+  } catch (e) {}
+  return null;
+}
+
+function safeSetStorage(key: string, val: string): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(key, val);
+    }
+  } catch (e) {}
+}
 
 /**
  * Inicializa 500 cotas padrão para demonstração instantânea no navegador
@@ -97,7 +116,7 @@ export async function obterCotas(): Promise<Cota[]> {
         .order('numero', { ascending: true });
 
       if (!error && data && data.length > 0) {
-        localStorage.setItem(LOCAL_STORAGE_COTAS_KEY, JSON.stringify(data));
+        safeSetStorage(LOCAL_STORAGE_COTAS_KEY, JSON.stringify(data));
         return data as Cota[];
       }
       console.warn('Supabase não retornou cotas, utilizando estado local.', error);
@@ -106,8 +125,8 @@ export async function obterCotas(): Promise<Cota[]> {
     }
   }
 
-  // Fallback LocalStorage
-  const localData = localStorage.getItem(LOCAL_STORAGE_COTAS_KEY);
+  // Fallback LocalStorage seguro
+  const localData = safeGetStorage(LOCAL_STORAGE_COTAS_KEY);
   if (localData) {
     try {
       return JSON.parse(localData);
@@ -117,7 +136,7 @@ export async function obterCotas(): Promise<Cota[]> {
   }
 
   const cotasIniciais = gerarCotasIniciais();
-  localStorage.setItem(LOCAL_STORAGE_COTAS_KEY, JSON.stringify(cotasIniciais));
+  safeSetStorage(LOCAL_STORAGE_COTAS_KEY, JSON.stringify(cotasIniciais));
   return cotasIniciais;
 }
 
@@ -125,7 +144,7 @@ export async function obterCotas(): Promise<Cota[]> {
  * Salva cotas no estado local
  */
 export function salvarCotasLocais(cotas: Cota[]): void {
-  localStorage.setItem(LOCAL_STORAGE_COTAS_KEY, JSON.stringify(cotas));
+  safeSetStorage(LOCAL_STORAGE_COTAS_KEY, JSON.stringify(cotas));
 }
 
 /**
@@ -151,7 +170,7 @@ export async function obterPedidos(): Promise<Pedido[]> {
               ? p.cotas.map((c: any) => c.numero).sort((a: number, b: number) => a - b)
               : p.cotas_numeros || [],
         })) as Pedido[];
-        localStorage.setItem(LOCAL_STORAGE_PEDIDOS_KEY, JSON.stringify(formatados));
+        safeSetStorage(LOCAL_STORAGE_PEDIDOS_KEY, JSON.stringify(formatados));
         return formatados;
       }
     } catch (err) {
@@ -159,7 +178,7 @@ export async function obterPedidos(): Promise<Pedido[]> {
     }
   }
 
-  const localPedidos = localStorage.getItem(LOCAL_STORAGE_PEDIDOS_KEY);
+  const localPedidos = safeGetStorage(LOCAL_STORAGE_PEDIDOS_KEY);
   if (localPedidos) {
     try {
       return JSON.parse(localPedidos);
@@ -174,7 +193,7 @@ export async function obterPedidos(): Promise<Pedido[]> {
  * Salva pedido localmente
  */
 export function salvarPedidoLocal(novoPedido: Pedido): void {
-  const localPedidos = localStorage.getItem(LOCAL_STORAGE_PEDIDOS_KEY);
+  const localPedidos = safeGetStorage(LOCAL_STORAGE_PEDIDOS_KEY);
   let lista: Pedido[] = [];
   if (localPedidos) {
     try {
@@ -190,7 +209,7 @@ export function salvarPedidoLocal(novoPedido: Pedido): void {
   } else {
     lista.unshift(novoPedido);
   }
-  localStorage.setItem(LOCAL_STORAGE_PEDIDOS_KEY, JSON.stringify(lista));
+  safeSetStorage(LOCAL_STORAGE_PEDIDOS_KEY, JSON.stringify(lista));
 }
 
 /**

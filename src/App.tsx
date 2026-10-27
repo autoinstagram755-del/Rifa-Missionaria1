@@ -17,6 +17,7 @@ import {
   salvarCotasLocais,
   salvarPedidoLocal,
   verificarELiberarCotasExpiradas,
+  supabase,
 } from './lib/supabase.ts';
 import {
   calcularEstatisticas,
@@ -101,7 +102,43 @@ export default function App() {
         .catch((e) => console.warn('Erro ao carregar pedido do redirect:', e));
     }
 
-    // Intervalo de verificação periódica a cada 60s para liberar reservas com mais de 3h
+    // 1. Polling contínuo a cada 5s para sincronizar vendas do painel ou de outros clientes instantaneamente
+    const intervalPolling = setInterval(() => {
+      carregarDados();
+    }, 5000);
+
+    // 2. Sincronização imediata ao mudar de aba ou focar na janela
+    const handleVisChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        carregarDados();
+      }
+    };
+    const handleFocus = () => {
+      carregarDados();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('visibilitychange', handleVisChange);
+      window.addEventListener('focus', handleFocus);
+    }
+
+    // 3. Canal Realtime oficial do Supabase para alterações instantâneas
+    let channel: any = null;
+    try {
+      channel = supabase
+        .channel('public_cotas_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cotas' }, () => {
+          carregarDados();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => {
+          carregarDados();
+        })
+        .subscribe();
+    } catch (errRealtime) {
+      console.warn('Erro ao conectar ao Realtime Supabase:', errRealtime);
+    }
+
+    // 4. Intervalo de verificação periódica a cada 60s para liberar reservas com mais de 3h
     const intervalExpiracao = setInterval(async () => {
       const { pedidosCancelados, cotasLiberadas } = await verificarELiberarCotasExpiradas();
       if (pedidosCancelados > 0 || cotasLiberadas > 0) {
@@ -109,7 +146,17 @@ export default function App() {
       }
     }, 60000);
 
-    return () => clearInterval(intervalExpiracao);
+    return () => {
+      clearInterval(intervalPolling);
+      clearInterval(intervalExpiracao);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('visibilitychange', handleVisChange);
+        window.removeEventListener('focus', handleFocus);
+      }
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [carregarDados]);
 
   const stats = calcularEstatisticas(cotas);
