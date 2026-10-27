@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Search, CheckCircle, Clock, ShieldCheck, AlertCircle, Copy, Check, MessageSquare } from 'lucide-react';
-import { Pedido, Cota } from '../lib/supabase.ts';
+import { Pedido, Cota, supabase } from '../lib/supabase.ts';
 import { formatarMoeda, formatarNumeroCota, mascararCPF, mascararWhatsApp, TEMPO_EXPIRACAO_RESERVA_MS, WHATSAPP_SUPORTE_NUMERO } from '../utils/rules.ts';
 
 interface CheckOrderModalProps {
@@ -19,12 +19,16 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
   const [documentoOuId, setDocumentoOuId] = useState('');
   const [consultado, setConsultado] = useState(false);
   const [copiouPedidoId, setCopiouPedidoId] = useState<string | null>(null);
+  const [pedidosLive, setPedidosLive] = useState<Pedido[]>([]);
+  const [buscandoDb, setBuscandoDb] = useState(false);
 
   if (!isOpen) return null;
 
   const termoLimpo = documentoOuId.replace(/\D/g, '');
 
-  const pedidosEncontrados = pedidos.filter((p) => {
+  const listaCompleta = [...pedidos, ...pedidosLive.filter((pl) => !pedidos.some((p) => p.id === pl.id))];
+
+  const pedidosEncontrados = listaCompleta.filter((p) => {
     if (!termoLimpo && !documentoOuId.trim()) return false;
     const cpfPedidoLimpo = p.cpf.replace(/\D/g, '');
     const whatsPedidoLimpo = p.whatsapp.replace(/\D/g, '');
@@ -40,9 +44,36 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
     );
   });
 
-  const handleBuscar = (e: React.FormEvent) => {
+  const handleBuscar = async (e: React.FormEvent) => {
     e.preventDefault();
     setConsultado(true);
+    setBuscandoDb(true);
+
+    try {
+      // Busca direta no Supabase para garantir que pedidos recentes sejam encontrados imediatamente
+      let query = supabase.from('pedidos').select('*, cotas(numero, status)');
+      if (termoLimpo.length >= 8) {
+        query = query.or(`cpf.ilike.%${termoLimpo}%,whatsapp.ilike.%${termoLimpo}%`);
+      } else if (documentoOuId.trim().length >= 3) {
+        query = query.ilike('nome_comprador', `%${documentoOuId.trim()}%`);
+      }
+
+      const { data } = await query.limit(10);
+      if (data && data.length > 0) {
+        const formatados = data.map((p: any) => ({
+          ...p,
+          cotas_numeros:
+            p.cotas && Array.isArray(p.cotas) && p.cotas.length > 0
+              ? p.cotas.map((c: any) => c.numero).sort((a: number, b: number) => a - b)
+              : p.cotas_numeros || [],
+        })) as Pedido[];
+        setPedidosLive(formatados);
+      }
+    } catch (err) {
+      console.warn('Erro na busca live do pedido:', err);
+    } finally {
+      setBuscandoDb(false);
+    }
   };
 
   const copiarNumerosCotas = async (pedidoId: string, numeros: number[]) => {

@@ -24,6 +24,7 @@ import {
   NOME_TITULAR_PIX,
   CIDADE_PIX,
 } from '../utils/rules.ts';
+import { supabase } from '../lib/supabase.ts';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -84,6 +85,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     setCarregando(true);
 
+    let data: any = null;
+
     try {
       const response = await fetch('/api/criar-pagamento', {
         method: 'POST',
@@ -98,37 +101,125 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         }),
       });
 
-      const data = await response.json();
+      const resJson = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data.error || 'Erro ao processar reserva.');
+        // Se a API recusou com validação ou cota já ocupada, mostra o erro exato e interrompe
+        setErro(resJson.error || 'Erro ao processar reserva. Por favor, tente novamente.');
+        setCarregando(false);
+        return;
       }
 
+      data = resJson;
+    } catch (netErr) {
+      console.warn('API /api/criar-pagamento inacessível, acionando reserva direta no Supabase:', netErr);
+    }
+
+    // Se a API retornou com sucesso, finaliza
+    if (data && data.success) {
+      setCarregando(false);
       onSuccessCheckout({
         ...data,
         metodo: metodoPagamento,
       });
-    } catch (err: any) {
-      console.warn('Erro ao chamar /api/criar-pagamento, usando fallback local com Pix Oficial:', err);
-      // Fallback com Pix Oficial Padrão Banco Central
-      const pedidoMockId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : '00000000-0000-4000-8000-000000000000';
+      return;
+    }
+
+    // FALLBACK DE ALTA RESILIÊNCIA: Conexão Direta com Supabase (Client-Side)
+    // Garante que NENHUM pedido de campanha de tráfego seja perdido mesmo com falha na API da Vercel
+    try {
+      const cpfLimpo = cpf.replace(/\D/g, '');
+      const pedidoId = crypto.randomUUID();
+      let cotasFinais: number[] = [];
+
+      // 1. Se o comprador escolheu números específicos
+      if (cotasEscolhidas.length === qtdCotas) {
+        const { data: cotasDb, error: errVerif } = await supabase
+          .from('cotas')
+          .select('numero, status')
+          .in('numero', cotasEscolhidas);
+
+        if (errVerif) {
+          throw new Error('Falha ao verificar disponibilidade no banco de dados.');
+        }
+
+        const indisponiveis = (cotasDb || []).filter((c) => c.status !== 'disponivel');
+        if (indisponiveis.length > 0) {
+          setErro(
+            `As seguintes cotas acabaram de ser escolhidas por outro comprador: ${indisponiveis
+              .map((c) => formatarNumeroCota(c.numero))
+              .join(', ')}. Por favor, escolha outros números.`
+          );
+          setCarregando(false);
+          return;
+        }
+        cotasFinais = [...cotasEscolhidas].sort((a, b) => a - b);
+      } else {
+        // Busca primeiras cotas livres
+        const { data: livresDb, error: errLivres } = await supabase
+          .from('cotas')
+          .select('numero')
+          .eq('status', 'disponivel')
+          .order('numero', { ascending: true })
+          .limit(qtdCotas);
+
+        if (errLivres || !livresDb || livresDb.length < qtdCotas) {
+          setErro(`Desculpe, não há ${qtdCotas} cotas livres disponíveis no momento.`);
+          setCarregando(false);
+          return;
+        }
+        cotasFinais = livresDb.map((c) => c.numero);
+      }
+
+      // 2. Registra o pedido no Supabase
+      const { error: errPedido } = await supabase.from('pedidos').insert({
+        id: pedidoId,
+        nome_comprador: nome.trim(),
+        whatsapp: whatsapp.trim(),
+        cpf: cpfLimpo,
+        valor_total: valorTotal,
+        quantidade_cotas: qtdCotas,
+        status_pagamento: 'pendente',
+        created_at: new Date().toISOString(),
+      });
+
+      if (errPedido) {
+        throw new Error('Erro ao salvar pedido no banco de dados: ' + errPedido.message);
+      }
+
+      // 3. Atualiza as cotas para reservado no Supabase
+      const { error: errCotas } = await supabase
+        .from('cotas')
+        .update({
+          status: 'reservado',
+          pedido_id: pedidoId,
+        })
+        .in('numero', cotasFinais);
+
+      if (errCotas) {
+        throw new Error('Erro ao reservar cotas no banco de dados.');
+      }
+
+      // 4. Gera código Pix Oficial Banco Central
+      const txid = pedidoId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 25);
       const pixOficial = gerarPixBacen(
         CHAVE_PIX_OFICIAL,
         NOME_TITULAR_PIX,
         CIDADE_PIX,
         valorTotal,
-        pedidoMockId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 25)
+        txid
       );
-      
+
+      setCarregando(false);
       onSuccessCheckout({
         success: true,
-        pedido_id: pedidoMockId,
+        pedido_id: pedidoId,
         nome_comprador: nome.trim(),
         whatsapp: whatsapp.trim(),
-        cpf: cpf.replace(/\D/g, ''),
+        cpf: cpfLimpo,
         valor_total: valorTotal,
         quantidade_cotas: qtdCotas,
-        cotas_numeros: cotasEscolhidas.length > 0 ? cotasEscolhidas : Array.from({ length: qtdCotas }, (_, i) => i + 101),
+        cotas_numeros: cotasFinais,
         status: 'pendente',
         metodo: metodoPagamento,
         pix_copia_cola: pixOficial,
@@ -136,11 +227,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         chave_pix: CHAVE_PIX_OFICIAL,
         chave_pix_formatada: CHAVE_PIX_FORMATADA,
         titular_pix: NOME_TITULAR_PIX,
-        checkout_url: `https://checkout.infinitepay.io/jocimar-silva-128?amount=${Math.round(valorTotal * 100)}&order_nsu=${pedidoMockId}`,
+        checkout_url: `https://checkout.infinitepay.io/jocimar-silva-128?amount=${Math.round(valorTotal * 100)}&order_nsu=${pedidoId}`,
         expires_at: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
       });
-    } finally {
+    } catch (fallbackErr: any) {
+      console.error('Falha crítica na reserva:', fallbackErr);
       setCarregando(false);
+      setErro(
+        fallbackErr.message ||
+          'Não foi possível registrar sua reserva no momento. Por favor, verifique sua conexão ou fale conosco no WhatsApp.'
+      );
     }
   };
 
