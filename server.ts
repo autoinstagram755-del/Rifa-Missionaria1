@@ -59,10 +59,6 @@ async function startServer() {
     expirarReservasHandler(fakeReq, fakeRes).catch(() => {});
   };
 
-  // Executa imediatamente na inicialização do servidor e depois periodicamente a cada 60s
-  rodarExpiracao();
-  setInterval(rodarExpiracao, 60000);
-
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -80,6 +76,9 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Servidor Ação Solidária rodando em http://localhost:${PORT}`);
+    // Executa expiração em segundo plano após o servidor estar ativo na porta 3000
+    setTimeout(rodarExpiracao, 1500);
+    setInterval(rodarExpiracao, 60000);
   });
 }
 
