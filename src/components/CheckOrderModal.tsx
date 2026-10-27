@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Search, CheckCircle, Clock, ShieldCheck, AlertCircle, Copy, Check, MessageSquare } from 'lucide-react';
+import { X, Search, CheckCircle, Clock, ShieldCheck, AlertCircle, Copy, Check, MessageSquare, Loader2 } from 'lucide-react';
 import { Pedido, Cota, supabase } from '../lib/supabase.ts';
 import { formatarMoeda, formatarNumeroCota, mascararCPF, mascararWhatsApp, TEMPO_EXPIRACAO_RESERVA_MS, WHATSAPP_SUPORTE_NUMERO } from '../utils/rules.ts';
 
@@ -50,11 +50,37 @@ export const CheckOrderModal: React.FC<CheckOrderModalProps> = ({
     setBuscandoDb(true);
 
     try {
-      // Busca direta no Supabase para garantir que pedidos recentes sejam encontrados imediatamente
+      const numCota = parseInt(termoLimpo, 10);
+      const ehBuscaCota = !isNaN(numCota) && numCota >= 1 && numCota <= 500 && termoLimpo.length <= 3;
+
+      // 1. Se digitou um número de cota específico (ex: 35 ou 035 ou 71)
+      if (ehBuscaCota) {
+        const { data: cotaData } = await supabase
+          .from('cotas')
+          .select('numero, status, pedido_id, pedidos(*, cotas(numero, status))')
+          .eq('numero', numCota)
+          .maybeSingle();
+
+        if (cotaData?.pedidos) {
+          const pedObj = cotaData.pedidos as any;
+          const formatado: Pedido = {
+            ...pedObj,
+            cotas_numeros:
+              pedObj.cotas && Array.isArray(pedObj.cotas) && pedObj.cotas.length > 0
+                ? pedObj.cotas.map((c: any) => c.numero).sort((a: number, b: number) => a - b)
+                : [numCota],
+          };
+          setPedidosLive([formatado]);
+          setBuscandoDb(false);
+          return;
+        }
+      }
+
+      // 2. Busca direta no Supabase por CPF, WhatsApp, Nome ou ID
       let query = supabase.from('pedidos').select('*, cotas(numero, status)');
-      if (termoLimpo.length >= 8) {
+      if (termoLimpo.length >= 3) {
         query = query.or(`cpf.ilike.%${termoLimpo}%,whatsapp.ilike.%${termoLimpo}%`);
-      } else if (documentoOuId.trim().length >= 3) {
+      } else if (documentoOuId.trim().length >= 2) {
         query = query.ilike('nome_comprador', `%${documentoOuId.trim()}%`);
       }
 
